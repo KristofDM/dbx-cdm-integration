@@ -2,18 +2,16 @@
 # MAGIC %md
 # MAGIC # 02 - Generate Bronze (Raw) Data
 # MAGIC
-# MAGIC This notebook generates **synthetic bronze-layer data** that simulates
-# MAGIC raw banking data as it would arrive from source systems.
+# MAGIC Generates **synthetic bronze-layer data** simulating raw banking source system exports.
 # MAGIC
-# MAGIC The bronze data intentionally includes common data quality issues:
-# MAGIC - Inconsistent date formats
-# MAGIC - Mixed case in string fields
-# MAGIC - Null/missing values
-# MAGIC - Denormalized or flattened structures
-# MAGIC - Duplicate records
-# MAGIC - Extra whitespace and formatting inconsistencies
+# MAGIC **New in production version:**
+# MAGIC - Generates data for **BankExtended** fields (riskRating, swiftCode, etc.)
+# MAGIC - Generates data for the **KYCCheck** custom entity
 # MAGIC
-# MAGIC This data will be transformed to CDM-conformant silver data in notebook `03`.
+# MAGIC Bronze data intentionally includes common data quality issues:
+# MAGIC - Inconsistent date formats, mixed case, extra whitespace
+# MAGIC - Null/missing values, duplicate records
+# MAGIC - Non-standard status/boolean representations
 
 # COMMAND ----------
 
@@ -44,12 +42,11 @@ random.seed(RANDOM_SEED)
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Helper Functions for Data Generation
+# MAGIC ## Helper Functions
 
 # COMMAND ----------
 
 def random_uuid():
-    """Generate a random UUID string."""
     return str(uuid.uuid4())
 
 
@@ -59,8 +56,6 @@ def random_date(start_year=2015, end_year=2024):
     month = random.randint(1, 12)
     day = random.randint(1, 28)
     dt = datetime(year, month, day, random.randint(0, 23), random.randint(0, 59))
-
-    # Intentionally use inconsistent date formats (bronze data is messy!)
     formats = [
         "%Y-%m-%d %H:%M:%S",
         "%m/%d/%Y %H:%M",
@@ -72,7 +67,6 @@ def random_date(start_year=2015, end_year=2024):
 
 
 def random_date_consistent(start_year=2015, end_year=2024):
-    """Generate a random datetime object (for cleaner date fields)."""
     year = random.randint(start_year, end_year)
     month = random.randint(1, 12)
     day = random.randint(1, 28)
@@ -80,14 +74,10 @@ def random_date_consistent(start_year=2015, end_year=2024):
 
 
 def maybe_null(value, null_probability=0.1):
-    """Return None with given probability, otherwise return the value."""
-    if random.random() < null_probability:
-        return None
-    return value
+    return None if random.random() < null_probability else value
 
 
 def random_whitespace(value):
-    """Add random leading/trailing whitespace to simulate data issues."""
     if value is None:
         return None
     if random.random() < 0.2:
@@ -98,7 +88,6 @@ def random_whitespace(value):
 
 
 def random_case(value):
-    """Randomly change case to simulate inconsistent data entry."""
     if value is None:
         return None
     r = random.random()
@@ -111,11 +100,10 @@ def random_case(value):
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Reference Data (used for data generation)
+# MAGIC ## Reference Data
 
 # COMMAND ----------
 
-# Belgian bank names (realistic for demo)
 BANK_NAMES = [
     "KBC Group",
     "BNP Paribas Fortis",
@@ -124,7 +112,6 @@ BANK_NAMES = [
     "Argenta",
 ]
 
-# Belgian cities for branches
 BELGIAN_CITIES = [
     "Brussels", "Antwerp", "Ghent", "Bruges", "Leuven",
     "Liège", "Namur", "Mechelen", "Hasselt", "Kortrijk",
@@ -165,21 +152,32 @@ HOLDING_TYPES_BRONZE = [
 
 CURRENCY_CODES = ["EUR", "eur", "Eur", "USD", "GBP"]
 
+# Extension-specific reference data
+SWIFT_CODES = ["KREDBEBB", "GEBABEBB", "GKCCBEBB", "BBRUBEBB", "ARSPBE22"]
+ONBOARDING_CHANNELS = ["digital", "Digital", "DIGITAL", "branch", "Branch", "partnership", "Partnership", "acquisition"]
+KYC_CHECK_TYPES = ["id_verification", "ID Verification", "address_proof", "Address Proof",
+                    "income_verification", "Income Verification", "pep_check", "PEP Check",
+                    "sanctions_screening", "Sanctions Screening"]
+KYC_RESULTS = ["pass", "Pass", "PASS", "fail", "Fail", "pending", "Pending", "expired"]
+KYC_VERIFIERS = ["AutoKYC System", "Compliance Bot v2", "Manual Review",
+                  "Jan Peeters", "Sophie Dubois", "BelFIU Scanner", None]
+
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Generate Bronze Bank Data
+# MAGIC ## Generate Bronze Bank Data (with Extension Fields)
 
 # COMMAND ----------
 
 def generate_bronze_banks(count: int) -> list:
-    """Generate messy bronze bank records."""
+    """Generate messy bronze bank records including BankExtended fields."""
     records = []
     for i in range(count):
         bank_id = random_uuid()
         name = BANK_NAMES[i % len(BANK_NAMES)]
 
         record = {
+            # Standard CDM Bank fields (source system column names)
             "src_bank_id": bank_id,
             "bank_name": random_whitespace(random_case(name)),
             "bank_code": maybe_null(f"BE-{random.randint(100, 999)}"),
@@ -194,10 +192,16 @@ def generate_bronze_banks(count: int) -> list:
             "created_date": random_date(2010, 2020),
             "modified_date": random_date(2020, 2024),
             "integration_key": f"BANK-{i+1:03d}",
+            # --- BankExtended fields (org-specific, messy) ---
+            "risk_rating": maybe_null(str(random.randint(1, 5)), 0.1),
+            "swift_code": maybe_null(random_case(SWIFT_CODES[i % len(SWIFT_CODES)]), 0.1),
+            "nbb_license": maybe_null(f"NBB-{random.randint(10000, 99999)}", 0.15),
+            "onboarding_channel": maybe_null(random.choice(ONBOARDING_CHANNELS), 0.2),
+            "psd2_compliant": random.choice(["yes", "Yes", "true", "1", "no", "false", "0", None]),
         }
         records.append(record)
 
-    # Add a deliberate duplicate (common bronze data issue)
+    # Deliberate duplicate
     if records:
         duplicate = records[0].copy()
         duplicate["modified_date"] = random_date(2023, 2024)
@@ -213,12 +217,10 @@ def generate_bronze_banks(count: int) -> list:
 # COMMAND ----------
 
 def generate_bronze_branches(count: int, bank_ids: list) -> list:
-    """Generate messy bronze branch records."""
     records = []
     for i in range(count):
         branch_id = random_uuid()
         city = random.choice(BELGIAN_CITIES)
-
         record = {
             "branch_id": branch_id,
             "fk_bank_id": random.choice(bank_ids),
@@ -237,33 +239,29 @@ def generate_bronze_branches(count: int, bank_ids: list) -> list:
             "integration_key": f"BRANCH-{i+1:04d}",
         }
         records.append(record)
-
     return records
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Generate Bronze Contact (Customer) Data
+# MAGIC ## Generate Bronze Contact Data
 
 # COMMAND ----------
 
 def generate_bronze_contacts(count: int, branch_ids: list) -> list:
-    """Generate messy bronze contact/customer records."""
     records = []
     for i in range(count):
         contact_id = random_uuid()
         first = random.choice(FIRST_NAMES)
         last = random.choice(LAST_NAMES)
 
-        # Inconsistent email formats
         email_formats = [
             f"{first.lower()}.{last.lower().replace(' ', '')}@example.com",
             f"{first[0].lower()}{last.lower().replace(' ', '')}@mail.be",
             f"{first.lower()}_{last.lower().replace(' ', '')}@bank.be",
-            None,  # Some contacts have no email
+            None,
         ]
 
-        # Inconsistent date of birth formats
         dob_year = random.randint(1950, 2005)
         dob_month = random.randint(1, 12)
         dob_day = random.randint(1, 28)
@@ -293,7 +291,7 @@ def generate_bronze_contacts(count: int, branch_ids: list) -> list:
         }
         records.append(record)
 
-    # Add deliberate duplicates (5% duplicate rate)
+    # 5% duplicate rate
     num_duplicates = max(1, count // 20)
     for _ in range(num_duplicates):
         dup = random.choice(records).copy()
@@ -310,12 +308,10 @@ def generate_bronze_contacts(count: int, branch_ids: list) -> list:
 # COMMAND ----------
 
 def generate_bronze_accounts(count: int, branch_ids: list, contact_ids: list) -> list:
-    """Generate messy bronze account records."""
     records = []
     for i in range(count):
         account_id = random_uuid()
         account_num = f"BE{random.randint(10, 99)}-{random.randint(1000, 9999)}-{random.randint(1000, 9999)}-{random.randint(10, 99)}"
-
         record = {
             "acct_id": account_id,
             "account_number": account_num,
@@ -331,7 +327,6 @@ def generate_bronze_accounts(count: int, branch_ids: list, contact_ids: list) ->
             "int_key": f"ACCT-{i+1:05d}",
         }
         records.append(record)
-
     return records
 
 # COMMAND ----------
@@ -342,13 +337,11 @@ def generate_bronze_accounts(count: int, branch_ids: list, contact_ids: list) ->
 # COMMAND ----------
 
 def generate_bronze_financial_holdings(count: int, contact_ids: list, account_ids: list) -> list:
-    """Generate messy bronze financial holding records."""
     records = []
     for i in range(count):
         holding_id = random_uuid()
         holding_type = random.choice(HOLDING_TYPES_BRONZE)
 
-        # Generate realistic balance ranges based on holding type
         if holding_type.lower() in ("loan", "credit_line", "line of credit"):
             balance = round(random.uniform(-500000, -1000), 2)
         elif holding_type.lower() in ("term_deposit", "term deposit", "investment"):
@@ -356,7 +349,6 @@ def generate_bronze_financial_holdings(count: int, contact_ids: list, account_id
         else:
             balance = round(random.uniform(100, 500000), 2)
 
-        # Interest rates
         if holding_type.lower() in ("loan", "credit_line", "line of credit"):
             rate = round(random.uniform(1.5, 8.5), 4)
         elif holding_type.lower() in ("savings", "savings account", "term_deposit", "term deposit"):
@@ -390,31 +382,81 @@ def generate_bronze_financial_holdings(count: int, contact_ids: list, account_id
             "int_key": f"FH-{i+1:06d}",
         }
         records.append(record)
+    return records
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Generate Bronze KYC Check Data (Custom Entity)
+# MAGIC
+# MAGIC **This entity does not exist in the standard CDM.**
+# MAGIC It demonstrates how to generate data for a custom entity
+# MAGIC that was created for Belgian AML/CFT compliance.
+
+# COMMAND ----------
+
+def generate_bronze_kyc_checks(count: int, contact_ids: list) -> list:
+    """Generate messy bronze KYC check records."""
+    records = []
+    for i in range(count):
+        kyc_id = random_uuid()
+        check_date = random_date_consistent(2020, 2025)
+        expiry_offset = random.randint(180, 365 * 3)
+
+        record = {
+            "kyc_id": kyc_id,
+            "customer_ref": random.choice(contact_ids),
+            "check_type": random.choice(KYC_CHECK_TYPES),
+            "check_date": random_date(2020, 2025),
+            "expiry_date": maybe_null(
+                (check_date + timedelta(days=expiry_offset)).strftime(
+                    random.choice(["%Y-%m-%d", "%m/%d/%Y", "%d-%m-%Y"])
+                ),
+                0.15,
+            ),
+            "result": random.choice(KYC_RESULTS),
+            "risk_score": maybe_null(str(random.randint(0, 100)), 0.1),
+            "verified_by": random_whitespace(random.choice(KYC_VERIFIERS)),
+            "notes": maybe_null(
+                random.choice([
+                    "Standard check completed",
+                    "Requires follow-up documentation",
+                    "Automated screening - no issues",
+                    "FLAGGED: PEP match requires manual review",
+                    "Expired - renewal pending",
+                    "Enhanced due diligence applied",
+                    None,
+                ]),
+                0.3,
+            ),
+            "status": random.choice(["active", "Active", "ACTIVE", "inactive", "1", "0"]),
+            "created_timestamp": random_date(2020, 2024),
+            "updated_timestamp": random_date(2023, 2025),
+            "int_key": f"KYC-{i+1:06d}",
+        }
+        records.append(record)
 
     return records
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Write Bronze Data to Delta Tables
+# MAGIC ## Write All Bronze Data
 
 # COMMAND ----------
 
 def write_bronze_data():
     """Generate and write all bronze data to Delta tables."""
-
     print("=" * 60)
-    print("Generating Bronze Data")
+    print("Generating Bronze Data (with extensions + custom entities)")
     print("=" * 60)
 
-    # --- 1. Banks ---
-    print("\n1. Generating Bank data...")
+    # --- 1. Banks (with BankExtended fields) ---
+    print("\n1. Generating Bank data (with extension fields)...")
     bank_records = generate_bronze_banks(BRONZE_RECORD_COUNTS["bank"])
     bank_df = spark.createDataFrame([Row(**r) for r in bank_records])
     bank_df.write.format("delta").mode("overwrite").save(get_bronze_path("bank"))
     print(f"   Written {bank_df.count()} records to {get_bronze_path('bank')}")
-
-    # Collect bank IDs for foreign key references
     bank_ids = [r["src_bank_id"] for r in bank_records]
 
     # --- 2. Branches ---
@@ -423,18 +465,14 @@ def write_bronze_data():
     branch_df = spark.createDataFrame([Row(**r) for r in branch_records])
     branch_df.write.format("delta").mode("overwrite").save(get_bronze_path("branch"))
     print(f"   Written {branch_df.count()} records to {get_bronze_path('branch')}")
-
-    # Collect branch IDs for FK references
     branch_ids = [r["branch_id"] for r in branch_records]
 
-    # --- 3. Contacts (Customers) ---
+    # --- 3. Contacts ---
     print("\n3. Generating Contact data...")
     contact_records = generate_bronze_contacts(BRONZE_RECORD_COUNTS["contact"], branch_ids)
     contact_df = spark.createDataFrame([Row(**r) for r in contact_records])
     contact_df.write.format("delta").mode("overwrite").save(get_bronze_path("contact"))
     print(f"   Written {contact_df.count()} records to {get_bronze_path('contact')}")
-
-    # Collect contact IDs for FK references
     contact_ids = [r["customer_id"] for r in contact_records]
 
     # --- 4. Accounts ---
@@ -445,8 +483,6 @@ def write_bronze_data():
     account_df = spark.createDataFrame([Row(**r) for r in account_records])
     account_df.write.format("delta").mode("overwrite").save(get_bronze_path("account"))
     print(f"   Written {account_df.count()} records to {get_bronze_path('account')}")
-
-    # Collect account IDs for FK references
     account_ids = [r["acct_id"] for r in account_records]
 
     # --- 5. Financial Holdings ---
@@ -455,13 +491,23 @@ def write_bronze_data():
         BRONZE_RECORD_COUNTS["financial_holding"], contact_ids, account_ids
     )
     holding_df = spark.createDataFrame([Row(**r) for r in holding_records])
-    holding_df.write.format("delta").mode("overwrite").save(
-        get_bronze_path("financial_holding")
-    )
+    holding_df.write.format("delta").mode("overwrite").save(get_bronze_path("financial_holding"))
     print(f"   Written {holding_df.count()} records to {get_bronze_path('financial_holding')}")
+
+    # --- 6. KYC Checks (CUSTOM ENTITY) ---
+    print("\n6. Generating KYCCheck data (custom entity)...")
+    kyc_records = generate_bronze_kyc_checks(
+        BRONZE_RECORD_COUNTS["kyc_check"], contact_ids
+    )
+    kyc_df = spark.createDataFrame([Row(**r) for r in kyc_records])
+    kyc_df.write.format("delta").mode("overwrite").save(get_bronze_path("kyc_check"))
+    print(f"   Written {kyc_df.count()} records to {get_bronze_path('kyc_check')}")
 
     print("\n" + "=" * 60)
     print("Bronze data generation complete!")
+    print(f"  Standard entities: Bank, Branch, Contact, Account, FinancialHolding")
+    print(f"  Extension fields:  BankExtended (riskRating, swiftCode, ...)")
+    print(f"  Custom entities:   KYCCheck")
     print("=" * 60)
 
     return {
@@ -495,4 +541,4 @@ for entity in CDM_ENTITIES:
     print(f"Record count: {df.count()}")
     print(f"Schema:")
     df.printSchema()
-    df.show(5, truncate=False)
+    df.show(3, truncate=False)

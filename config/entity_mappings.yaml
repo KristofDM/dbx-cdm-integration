@@ -1,0 +1,425 @@
+# =============================================================================
+# Entity Mappings Configuration — Bronze-to-Silver Column Mappings
+# =============================================================================
+#
+# This file externalizes ALL bronze-to-silver column mapping logic.
+# In production, this is the ONLY file you edit when:
+#   - Source system column names change
+#   - New source fields are added
+#   - Transform rules need updating
+#
+# Each entity defines:
+#   cdm_schema:    Path to .cdm.json (relative to cdm_schemas/)
+#   bronze:        Deduplication configuration
+#   mappings:      target_column -> { source, transform, default }
+#   derived:       Computed fields generated after the main mapping
+#
+# Available transforms:
+#   trim, initcap_trim, upper_trim, lower_trim,
+#   parse_timestamp, parse_date,
+#   resolve_statecode, normalize_country, normalize_boolean,
+#   normalize_currency, cast_integer, cast_decimal,
+#   resolve_holding_type, resolve_account_type,
+#   resolve_kyc_check_type, resolve_kyc_check_result
+#   derive_fullname (special: uses first_name + last_name)
+# =============================================================================
+
+entities:
+
+  # =========================================================================
+  # BANK — Uses BankExtended schema (extends standard CDM Bank)
+  # =========================================================================
+  bank:
+    cdm_schema: "extensions/BankExtended.cdm.json"
+    cdm_entity_name: "BankExtended"
+    description: "Bank institution — extended with Belgian regulatory fields"
+    bronze:
+      dedup_key: "integration_key"
+      dedup_order: "modified_date"
+    mappings:
+      bankId:
+        source: "src_bank_id"
+      createdOn:
+        source: "created_date"
+        transform: "parse_timestamp"
+      modifiedOn:
+        source: "modified_date"
+        transform: "parse_timestamp"
+      statecode:
+        source: "status"
+        transform: "resolve_statecode"
+      name:
+        source: "bank_name"
+        transform: "trim"
+      bankCode:
+        source: "bank_code"
+        transform: "trim"
+      addressLine1:
+        source: "address_1"
+        transform: "trim"
+      addressLine2:
+        source: "address_2"
+        transform: "trim"
+      addressLine3:
+        default: null
+      city:
+        source: "city"
+        transform: "initcap_trim"
+      stateOrProvince:
+        source: "province"
+        transform: "initcap_trim"
+      postalCode:
+        source: "zip_code"
+        transform: "trim"
+      country:
+        source: "country_code"
+        transform: "normalize_country"
+      telephone1:
+        source: "phone"
+        transform: "trim"
+      integrationKey:
+        source: "integration_key"
+      # --- Extension fields (BankExtended) ---
+      riskRating:
+        source: "risk_rating"
+        transform: "cast_integer"
+      swiftCode:
+        source: "swift_code"
+        transform: "upper_trim"
+      regulatoryLicenseNumber:
+        source: "nbb_license"
+        transform: "trim"
+      onboardingChannel:
+        source: "onboarding_channel"
+        transform: "initcap_trim"
+      isPSD2Compliant:
+        source: "psd2_compliant"
+        transform: "normalize_boolean"
+    derived:
+      - name: "statecode_display"
+        from: "statecode"
+        transform: "statecode_to_display"
+      - name: "statuscode"
+        from: "statecode"
+        transform: "statecode_to_statuscode"
+      - name: "statuscode_display"
+        from: "statuscode"
+        transform: "statuscode_to_display"
+
+  # =========================================================================
+  # BRANCH — Standard CDM entity (no extensions)
+  # =========================================================================
+  branch:
+    cdm_schema: "standard/Branch.cdm.json"
+    cdm_entity_name: "Branch"
+    description: "Bank branch"
+    bronze:
+      dedup_key: "integration_key"
+      dedup_order: "updated_at"
+    mappings:
+      branchId:
+        source: "branch_id"
+      bankId:
+        source: "fk_bank_id"
+      createdOn:
+        source: "created_at"
+        transform: "parse_timestamp"
+      modifiedOn:
+        source: "updated_at"
+        transform: "parse_timestamp"
+      statecode:
+        source: "is_active"
+        transform: "resolve_statecode"
+      name:
+        source: "branch_name"
+        transform: "initcap_trim"
+      branchCode:
+        source: "branch_code"
+        transform: "trim"
+      addressLine1:
+        source: "street_address"
+        transform: "trim"
+      addressLine2:
+        source: "address_line_2"
+        transform: "trim"
+      addressLine3:
+        default: null
+      city:
+        source: "city_name"
+        transform: "initcap_trim"
+      stateOrProvince:
+        source: "state_province"
+        transform: "initcap_trim"
+      postalCode:
+        source: "postal_code"
+        transform: "trim"
+      country:
+        source: "country"
+        transform: "normalize_country"
+      telephone1:
+        source: "phone_number"
+        transform: "trim"
+      integrationKey:
+        source: "integration_key"
+    derived:
+      - name: "statecode_display"
+        from: "statecode"
+        transform: "statecode_to_display"
+      - name: "statuscode"
+        from: "statecode"
+        transform: "statecode_to_statuscode"
+      - name: "statuscode_display"
+        from: "statuscode"
+        transform: "statuscode_to_display"
+
+  # =========================================================================
+  # CONTACT (Customer) — Standard CDM entity
+  # =========================================================================
+  contact:
+    cdm_schema: "standard/Contact.cdm.json"
+    cdm_entity_name: "Contact"
+    description: "Customer / contact"
+    bronze:
+      dedup_key: "src_integration_key"
+      dedup_order: "last_modified"
+    mappings:
+      contactId:
+        source: "customer_id"
+      branchId:
+        source: "primary_branch_id"
+      createdOn:
+        source: "created_timestamp"
+        transform: "parse_timestamp"
+      modifiedOn:
+        source: "last_modified"
+        transform: "parse_timestamp"
+      statecode:
+        source: "is_active"
+        transform: "resolve_statecode"
+      firstName:
+        source: "first_name"
+        transform: "initcap_trim"
+      lastName:
+        source: "last_name"
+        transform: "initcap_trim"
+      fullName:
+        source: "full_name"
+        transform: "derive_fullname"
+        fallback_sources: ["first_name", "last_name"]
+      emailAddress:
+        source: "email"
+        transform: "lower_trim"
+      telephone1:
+        source: "phone"
+        transform: "trim"
+      dateOfBirth:
+        source: "date_of_birth"
+        transform: "parse_date"
+      joinDate:
+        source: "join_date"
+        transform: "parse_timestamp"
+      tenureYears:
+        source: "tenure"
+        transform: "cast_decimal"
+      isManagedByBankSystem:
+        source: "managed_by_system"
+        transform: "normalize_boolean"
+      integrationKey:
+        source: "src_integration_key"
+    derived:
+      - name: "statecode_display"
+        from: "statecode"
+        transform: "statecode_to_display"
+      - name: "statuscode"
+        from: "statecode"
+        transform: "statecode_to_statuscode"
+      - name: "statuscode_display"
+        from: "statuscode"
+        transform: "statuscode_to_display"
+
+  # =========================================================================
+  # ACCOUNT — Standard CDM entity
+  # =========================================================================
+  account:
+    cdm_schema: "standard/Account.cdm.json"
+    cdm_entity_name: "Account"
+    description: "Customer account"
+    bronze:
+      dedup_key: "int_key"
+      dedup_order: "modified"
+    mappings:
+      accountId:
+        source: "acct_id"
+      branchId:
+        source: "branch_ref"
+      primaryContactId:
+        source: "primary_contact_ref"
+      createdOn:
+        source: "created"
+        transform: "parse_timestamp"
+      modifiedOn:
+        source: "modified"
+        transform: "parse_timestamp"
+      statecode:
+        source: "status_flag"
+        transform: "resolve_statecode"
+      name:
+        source: "acct_name"
+        transform: "trim"
+      accountNumber:
+        source: "account_number"
+        transform: "trim"
+      accountType:
+        source: "account_type"
+        transform: "resolve_account_type"
+      joinDate:
+        source: "join_date"
+        transform: "parse_timestamp"
+      tenureYears:
+        source: "tenure_years"
+        transform: "cast_decimal"
+      integrationKey:
+        source: "int_key"
+    derived:
+      - name: "statecode_display"
+        from: "statecode"
+        transform: "statecode_to_display"
+      - name: "statuscode"
+        from: "statecode"
+        transform: "statecode_to_statuscode"
+      - name: "statuscode_display"
+        from: "statuscode"
+        transform: "statuscode_to_display"
+
+  # =========================================================================
+  # FINANCIAL HOLDING — Standard CDM entity
+  # =========================================================================
+  financial_holding:
+    cdm_schema: "standard/FinancialHolding.cdm.json"
+    cdm_entity_name: "FinancialHolding"
+    description: "Financial product (deposit, loan, etc.)"
+    bronze:
+      dedup_key: "int_key"
+      dedup_order: "updated_timestamp"
+    mappings:
+      financialHoldingId:
+        source: "holding_id"
+      contactId:
+        source: "customer_ref"
+      accountId:
+        source: "account_ref"
+      createdOn:
+        source: "created_timestamp"
+        transform: "parse_timestamp"
+      modifiedOn:
+        source: "updated_timestamp"
+        transform: "parse_timestamp"
+      statecode:
+        source: "status"
+        transform: "resolve_statecode"
+      name:
+        source: "holding_name"
+        transform: "trim"
+      holdingType:
+        source: "type"
+        transform: "resolve_holding_type"
+      balance:
+        source: "balance_amount"
+        transform: "cast_decimal"
+      balanceDefault:
+        source: "balance_amount"
+        transform: "cast_decimal"
+      balanceDefaultDisplayValue:
+        source: "balance_display"
+        transform: "trim"
+      openedDate:
+        source: "opened_on"
+        transform: "parse_timestamp"
+      maturityDate:
+        source: "maturity_date"
+        transform: "parse_timestamp"
+      interestRate:
+        source: "interest_rate"
+        transform: "cast_decimal_rate"
+      currencyCode:
+        source: "currency"
+        transform: "normalize_currency"
+      integrationKey:
+        source: "int_key"
+    derived:
+      - name: "holdingType_display"
+        from: "holdingType"
+        transform: "holding_type_to_display"
+      - name: "statecode_display"
+        from: "statecode"
+        transform: "statecode_to_display"
+      - name: "statuscode"
+        from: "statecode"
+        transform: "statecode_to_statuscode"
+      - name: "statuscode_display"
+        from: "statuscode"
+        transform: "statuscode_to_display"
+
+  # =========================================================================
+  # KYC CHECK — Custom entity (not in standard CDM)
+  # =========================================================================
+  kyc_check:
+    cdm_schema: "extensions/KYCCheck.cdm.json"
+    cdm_entity_name: "KYCCheck"
+    description: "KYC compliance check (custom entity)"
+    bronze:
+      dedup_key: "int_key"
+      dedup_order: "updated_timestamp"
+    mappings:
+      kycCheckId:
+        source: "kyc_id"
+      contactId:
+        source: "customer_ref"
+      createdOn:
+        source: "created_timestamp"
+        transform: "parse_timestamp"
+      modifiedOn:
+        source: "updated_timestamp"
+        transform: "parse_timestamp"
+      statecode:
+        source: "status"
+        transform: "resolve_statecode"
+      checkType:
+        source: "check_type"
+        transform: "resolve_kyc_check_type"
+      checkDate:
+        source: "check_date"
+        transform: "parse_timestamp"
+      expiryDate:
+        source: "expiry_date"
+        transform: "parse_timestamp"
+      checkResult:
+        source: "result"
+        transform: "resolve_kyc_check_result"
+      riskScore:
+        source: "risk_score"
+        transform: "cast_integer"
+      verifiedBy:
+        source: "verified_by"
+        transform: "trim"
+      notes:
+        source: "notes"
+        transform: "trim"
+      integrationKey:
+        source: "int_key"
+    derived:
+      - name: "checkType_display"
+        from: "checkType"
+        transform: "kyc_check_type_to_display"
+      - name: "checkResult_display"
+        from: "checkResult"
+        transform: "kyc_check_result_to_display"
+      - name: "statecode_display"
+        from: "statecode"
+        transform: "statecode_to_display"
+      - name: "statuscode"
+        from: "statecode"
+        transform: "statecode_to_statuscode"
+      - name: "statuscode_display"
+        from: "statuscode"
+        transform: "statuscode_to_display"

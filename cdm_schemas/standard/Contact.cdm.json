@@ -1,0 +1,151 @@
+{
+  "jsonSchemaSemanticVersion": "1.5.0",
+  "imports": [
+    { "corpusPath": "cdm:/foundations.4.3.cdm.json" }
+  ],
+  "definitions": [
+    {
+      "entityName": "Contact",
+      "exhibitsTraits": [
+        {
+          "traitReference": "is.CDM.entityVersion",
+          "arguments": [{ "name": "versionNumber", "value": "1.0" }]
+        }
+      ],
+      "description": "A person with whom the bank has a relationship (customer, prospect). Source: FinancialServicesCommonDataModel/Contact.1.0.cdm.json",
+      "sourceName": "msfsi_contact",
+      "hasAttributes": [
+        {
+          "name": "contactId",
+          "dataType": "entityId",
+          "isNullable": false,
+          "isPrimaryKey": true,
+          "description": "Unique identifier for the contact"
+        },
+        {
+          "name": "branchId",
+          "dataType": "entityId",
+          "isNullable": true,
+          "description": "Foreign key to the primary Branch"
+        },
+        {
+          "name": "createdOn",
+          "dataType": "dateTime",
+          "isNullable": true,
+          "description": "Date and time when the record was created"
+        },
+        {
+          "name": "modifiedOn",
+          "dataType": "dateTime",
+          "isNullable": true,
+          "description": "Date and time when the record was last modified"
+        },
+        {
+          "name": "statecode",
+          "dataType": "listLookup",
+          "isNullable": false,
+          "description": "Status of the contact. Values: 0=Active, 1=Inactive",
+          "optionSet": {
+            "values": [
+              { "value": 0, "displayText": "Active" },
+              { "value": 1, "displayText": "Inactive" }
+            ]
+          }
+        },
+        {
+          "name": "statecode_display",
+          "dataType": "string",
+          "isNullable": true,
+          "description": "Display text for statecode"
+        },
+        {
+          "name": "statuscode",
+          "dataType": "listLookup",
+          "isNullable": true,
+          "description": "Reason for the status",
+          "optionSet": {
+            "values": [
+              { "value": 1, "displayText": "Active" },
+              { "value": 2, "displayText": "Inactive" }
+            ]
+          }
+        },
+        {
+          "name": "statuscode_display",
+          "dataType": "string",
+          "isNullable": true,
+          "description": "Display text for statuscode"
+        },
+        {
+          "name": "firstName",
+          "dataType": "string",
+          "isNullable": true,
+          "description": "First name of the contact"
+        },
+        {
+          "name": "lastName",
+          "dataType": "string",
+          "isNullable": true,
+          "description": "Last name of the contact"
+        },
+        {
+          "name": "fullName",
+          "dataType": "string",
+          "isNullable": true,
+          "description": "Full name of the contact"
+        },
+        {
+          "name": "emailAddress",
+          "dataType": "string",
+          "isNullable": true,
+          "description": "Primary email address"
+        },
+        {
+          "name": "telephone1",
+          "dataType": "string",
+          "isNullable": true,
+          "description": "Primary phone number"
+        },
+        {
+          "name": "dateOfBirth",
+          "dataType": "date",
+          "isNullable": true,
+          "description": "Date of birth"
+        },
+        {
+          "name": "joinDate",
+          "dataType": "dateTime",
+          "isNullable": true,
+          "description": "Date the contact joined the bank"
+        },
+        {
+          "name": "tenureYears",
+          "dataType": "decimal",
+          "isNullable": true,
+          "description": "Number of years as a customer",
+          "traits": [
+            {
+              "traitReference": "is.dataFormat.numeric.shaped",
+              "arguments": [
+                { "name": "precision", "value": "18" },
+                { "name": "scale", "value": "2" }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "isManagedByBankSystem",
+          "dataType": "boolean",
+          "isNullable": true,
+          "description": "Whether this contact is managed by the bank's core system"
+        },
+        {
+          "name": "integrationKey",
+          "dataType": "string",
+          "isNullable": true,
+          "description": "Integration key for cross-system identification"
+        }
+      ]
+    }
+  ]
+}

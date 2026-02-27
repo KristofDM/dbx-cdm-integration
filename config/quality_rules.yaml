@@ -1,0 +1,248 @@
+# =============================================================================
+# Data Quality Rules — Silver Layer Validation
+# =============================================================================
+#
+# Defines validation rules applied to silver (CDM-conformant) data.
+# The quality engine reads this file and produces a quality report.
+#
+# Rule types:
+#   not_null:      Column must not contain null values
+#   unique:        Column values must be unique across the dataset
+#   referential:   FK column values must exist in the referenced entity's PK
+#   range:         Numeric column must be within [min, max]
+#   length:        String column length must be within [min, max]
+#   pattern:       String column must match regex pattern
+#   completeness:  Percentage of non-null values must be >= threshold
+#
+# Severity levels: error, warning, info
+# =============================================================================
+
+entities:
+
+  bank:
+    rules:
+      - name: "bankId_not_null"
+        type: "not_null"
+        column: "bankId"
+        severity: "error"
+      - name: "bankId_unique"
+        type: "unique"
+        column: "bankId"
+        severity: "error"
+      - name: "integrationKey_unique"
+        type: "unique"
+        column: "integrationKey"
+        severity: "error"
+      - name: "statecode_valid"
+        type: "range"
+        column: "statecode"
+        min: 0
+        max: 1
+        severity: "error"
+      - name: "country_code_format"
+        type: "length"
+        column: "country"
+        min: 2
+        max: 2
+        severity: "warning"
+      - name: "name_completeness"
+        type: "completeness"
+        column: "name"
+        threshold: 90.0
+        severity: "warning"
+      # Extension field rules
+      - name: "risk_rating_range"
+        type: "range"
+        column: "riskRating"
+        min: 1
+        max: 5
+        severity: "warning"
+      - name: "swift_code_format"
+        type: "pattern"
+        column: "swiftCode"
+        pattern: "^[A-Z]{4}[A-Z]{2}[A-Z0-9]{2}([A-Z0-9]{3})?$"
+        severity: "warning"
+
+  branch:
+    rules:
+      - name: "branchId_not_null"
+        type: "not_null"
+        column: "branchId"
+        severity: "error"
+      - name: "branchId_unique"
+        type: "unique"
+        column: "branchId"
+        severity: "error"
+      - name: "bankId_referential"
+        type: "referential"
+        column: "bankId"
+        references:
+          entity: "bank"
+          column: "bankId"
+        severity: "error"
+      - name: "statecode_valid"
+        type: "range"
+        column: "statecode"
+        min: 0
+        max: 1
+        severity: "error"
+      - name: "country_code_format"
+        type: "length"
+        column: "country"
+        min: 2
+        max: 2
+        severity: "warning"
+
+  contact:
+    rules:
+      - name: "contactId_not_null"
+        type: "not_null"
+        column: "contactId"
+        severity: "error"
+      - name: "contactId_unique"
+        type: "unique"
+        column: "contactId"
+        severity: "error"
+      - name: "branchId_referential"
+        type: "referential"
+        column: "branchId"
+        references:
+          entity: "branch"
+          column: "branchId"
+        severity: "warning"
+      - name: "statecode_valid"
+        type: "range"
+        column: "statecode"
+        min: 0
+        max: 1
+        severity: "error"
+      - name: "email_completeness"
+        type: "completeness"
+        column: "emailAddress"
+        threshold: 70.0
+        severity: "warning"
+      - name: "name_completeness"
+        type: "completeness"
+        column: "fullName"
+        threshold: 95.0
+        severity: "warning"
+
+  account:
+    rules:
+      - name: "accountId_not_null"
+        type: "not_null"
+        column: "accountId"
+        severity: "error"
+      - name: "accountId_unique"
+        type: "unique"
+        column: "accountId"
+        severity: "error"
+      - name: "branchId_referential"
+        type: "referential"
+        column: "branchId"
+        references:
+          entity: "branch"
+          column: "branchId"
+        severity: "warning"
+      - name: "primaryContactId_referential"
+        type: "referential"
+        column: "primaryContactId"
+        references:
+          entity: "contact"
+          column: "contactId"
+        severity: "warning"
+      - name: "statecode_valid"
+        type: "range"
+        column: "statecode"
+        min: 0
+        max: 1
+        severity: "error"
+
+  financial_holding:
+    rules:
+      - name: "financialHoldingId_not_null"
+        type: "not_null"
+        column: "financialHoldingId"
+        severity: "error"
+      - name: "financialHoldingId_unique"
+        type: "unique"
+        column: "financialHoldingId"
+        severity: "error"
+      - name: "contactId_referential"
+        type: "referential"
+        column: "contactId"
+        references:
+          entity: "contact"
+          column: "contactId"
+        severity: "warning"
+      - name: "accountId_referential"
+        type: "referential"
+        column: "accountId"
+        references:
+          entity: "account"
+          column: "accountId"
+        severity: "warning"
+      - name: "statecode_valid"
+        type: "range"
+        column: "statecode"
+        min: 0
+        max: 1
+        severity: "error"
+      - name: "interest_rate_range"
+        type: "range"
+        column: "interestRate"
+        min: 0.0
+        max: 100.0
+        severity: "warning"
+      - name: "currency_code_format"
+        type: "length"
+        column: "currencyCode"
+        min: 3
+        max: 3
+        severity: "warning"
+
+  kyc_check:
+    rules:
+      - name: "kycCheckId_not_null"
+        type: "not_null"
+        column: "kycCheckId"
+        severity: "error"
+      - name: "kycCheckId_unique"
+        type: "unique"
+        column: "kycCheckId"
+        severity: "error"
+      - name: "contactId_not_null"
+        type: "not_null"
+        column: "contactId"
+        severity: "error"
+      - name: "contactId_referential"
+        type: "referential"
+        column: "contactId"
+        references:
+          entity: "contact"
+          column: "contactId"
+        severity: "error"
+      - name: "statecode_valid"
+        type: "range"
+        column: "statecode"
+        min: 0
+        max: 1
+        severity: "error"
+      - name: "risk_score_range"
+        type: "range"
+        column: "riskScore"
+        min: 0
+        max: 100
+        severity: "warning"
+      - name: "check_result_valid"
+        type: "range"
+        column: "checkResult"
+        min: 0
+        max: 3
+        severity: "error"
+      - name: "check_type_valid"
+        type: "range"
+        column: "checkType"
+        min: 0
+        max: 4
+        severity: "error"

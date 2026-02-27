@@ -1,0 +1,86 @@
+{
+  "$schema": "CdmManifestDefinition.cdm.json",
+  "manifestName": "RetailBankingDataModel",
+  "explanation": "Manifest for the Retail Banking CDM integration. References standard CDM entities from FinancialServices and custom extensions for organization-specific fields.",
+  "jsonSchemaSemanticVersion": "1.5.0",
+  "lastFileModifiedTime": "2026-02-27T00:00:00.000Z",
+  "imports": [],
+  "entities": [
+    {
+      "type": "LocalEntity",
+      "entityName": "Bank",
+      "entityPath": "extensions/BankExtended.cdm.json/BankExtended",
+      "explanation": "Uses BankExtended (extends standard CDM Bank with org-specific fields)"
+    },
+    {
+      "type": "LocalEntity",
+      "entityName": "Branch",
+      "entityPath": "standard/Branch.cdm.json/Branch"
+    },
+    {
+      "type": "LocalEntity",
+      "entityName": "Contact",
+      "entityPath": "standard/Contact.cdm.json/Contact"
+    },
+    {
+      "type": "LocalEntity",
+      "entityName": "Account",
+      "entityPath": "standard/Account.cdm.json/Account"
+    },
+    {
+      "type": "LocalEntity",
+      "entityName": "FinancialHolding",
+      "entityPath": "standard/FinancialHolding.cdm.json/FinancialHolding"
+    },
+    {
+      "type": "LocalEntity",
+      "entityName": "KYCCheck",
+      "entityPath": "extensions/KYCCheck.cdm.json/KYCCheck",
+      "explanation": "Custom entity for KYC compliance tracking (not in standard CDM)"
+    }
+  ],
+  "relationships": [
+    {
+      "fromEntity": "Branch",
+      "fromAttribute": "bankId",
+      "toEntity": "Bank",
+      "toAttribute": "bankId"
+    },
+    {
+      "fromEntity": "Contact",
+      "fromAttribute": "branchId",
+      "toEntity": "Branch",
+      "toAttribute": "branchId"
+    },
+    {
+      "fromEntity": "Account",
+      "fromAttribute": "branchId",
+      "toEntity": "Branch",
+      "toAttribute": "branchId"
+    },
+    {
+      "fromEntity": "Account",
+      "fromAttribute": "primaryContactId",
+      "toEntity": "Contact",
+      "toAttribute": "contactId"
+    },
+    {
+      "fromEntity": "FinancialHolding",
+      "fromAttribute": "contactId",
+      "toEntity": "Contact",
+      "toAttribute": "contactId"
+    },
+    {
+      "fromEntity": "FinancialHolding",
+      "fromAttribute": "accountId",
+      "toEntity": "Account",
+      "toAttribute": "accountId"
+    },
+    {
+      "fromEntity": "KYCCheck",
+      "fromAttribute": "contactId",
+      "toEntity": "Contact",
+      "toAttribute": "contactId"
+    }
+  ]
+}

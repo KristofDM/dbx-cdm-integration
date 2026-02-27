@@ -1,294 +1,175 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC # 01 - CDM Schema Definitions (PySpark StructTypes)
+# MAGIC # 01 - CDM Schema Loader (Dynamic from .cdm.json)
 # MAGIC
-# MAGIC This notebook defines the **silver layer schemas** based on the
-# MAGIC [Microsoft Common Data Model (CDM)](https://github.com/microsoft/CDM/tree/master)
-# MAGIC FinancialServices / RetailBankingCoreDataModel entities.
+# MAGIC **Production approach:** Schemas are parsed at runtime from `.cdm.json` files.
 # MAGIC
-# MAGIC Each schema is a PySpark `StructType` derived from the official CDM `.cdm.json` definitions at:
-# MAGIC - `schemaDocuments/FinancialServices/FinancialServicesCommonDataModel/`
-# MAGIC - `schemaDocuments/FinancialServices/RetailBankingCoreDataModel/`
+# MAGIC This notebook demonstrates:
+# MAGIC 1. **Standard entities** — Loaded from `cdm_schemas/standard/` (mirrors the Microsoft CDM repo)
+# MAGIC 2. **Extension entities** — Loaded from `cdm_schemas/extensions/BankExtended.cdm.json`
+# MAGIC    - `BankExtended` uses `extendsEntity` to inherit ALL fields from standard `Bank`
+# MAGIC    - Then adds org-specific fields (riskRating, swiftCode, regulatoryLicenseNumber, etc.)
+# MAGIC 3. **Custom entities** — Loaded from `cdm_schemas/extensions/KYCCheck.cdm.json`
+# MAGIC    - Net-new entity not in standard CDM, created for AML/KYC compliance
 # MAGIC
-# MAGIC These schemas enforce the canonical structure for the silver layer.
+# MAGIC **Why this matters:**
+# MAGIC > - No hand-coded PySpark `StructType` definitions
+# MAGIC > - Schema changes = edit the `.cdm.json` file, not Python code
+# MAGIC > - Extensions are additive — standard CDM updates don't break your customizations
+# MAGIC > - The parser resolves inheritance chains automatically
 
 # COMMAND ----------
 
-from pyspark.sql.types import (
-    StructType,
-    StructField,
-    StringType,
-    IntegerType,
-    LongType,
-    DoubleType,
-    DecimalType,
-    BooleanType,
-    TimestampType,
-    DateType,
-)
+# MAGIC %run ./00_config
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Bank Entity Schema
+# MAGIC ## Load All Schemas from Manifest
 # MAGIC
-# MAGIC **CDM Source:** `FinancialServicesCommonDataModel/Bank.1.0.cdm.json`
-# MAGIC
-# MAGIC Represents the bank institution. Key attributes include identification,
-# MAGIC address information, and status fields.
+# MAGIC The manifest (`manifest.cdm.json`) lists every entity the deployment uses.
+# MAGIC The parser resolves each one — including inheritance for extended entities.
 
 # COMMAND ----------
 
-BANK_SCHEMA = StructType(
-    [
-        # --- Primary Key ---
-        StructField("bankId", StringType(), nullable=False),
-        # --- Audit Fields ---
-        StructField("createdOn", TimestampType(), nullable=True),
-        StructField("modifiedOn", TimestampType(), nullable=True),
-        # --- Status Fields (CDM listLookup) ---
-        StructField("statecode", IntegerType(), nullable=False),
-        StructField("statecode_display", StringType(), nullable=True),
-        StructField("statuscode", IntegerType(), nullable=True),
-        StructField("statuscode_display", StringType(), nullable=True),
-        # --- Business Fields ---
-        StructField("name", StringType(), nullable=True),
-        StructField("bankCode", StringType(), nullable=True),
-        StructField("addressLine1", StringType(), nullable=True),
-        StructField("addressLine2", StringType(), nullable=True),
-        StructField("addressLine3", StringType(), nullable=True),
-        StructField("city", StringType(), nullable=True),
-        StructField("stateOrProvince", StringType(), nullable=True),
-        StructField("postalCode", StringType(), nullable=True),
-        StructField("country", StringType(), nullable=True),
-        StructField("telephone1", StringType(), nullable=True),
-        StructField("integrationKey", StringType(), nullable=True),
-    ]
-)
+# Load all PySpark schemas from the manifest
+CDM_SCHEMAS = cdm_parser.load_all_from_manifest()
 
-# Lookup values for Bank status fields
-BANK_STATUS_VALUES = {
-    0: "Active",
-    1: "Inactive",
-}
-
-BANK_STATUS_REASON_VALUES = {
-    1: "Active",
-    2: "Inactive",
-}
+print("=" * 60)
+print("CDM Schema Registry — Loaded from .cdm.json")
+print("=" * 60)
+for name, schema in CDM_SCHEMAS.items():
+    logical = _ENTITY_NAME_MAP.get(name, name.lower())
+    print(f"\n  {name} ({len(schema.fields)} fields) → silver entity: {logical}")
+    for field in schema.fields:
+        nullable_flag = "" if field.nullable else " [REQUIRED]"
+        print(f"    {field.name:40s} {str(field.dataType):20s}{nullable_flag}")
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Branch Entity Schema
+# MAGIC ## Demonstrate Extension Resolution
 # MAGIC
-# MAGIC **CDM Source:** `FinancialServicesCommonDataModel/Branch.1.0.cdm.json`
-# MAGIC
-# MAGIC Represents a bank branch. Linked to a Bank entity.
-# MAGIC Includes address, contact, and operational details.
+# MAGIC This is the KEY production pattern: `BankExtended` inherits from `Bank`.
+# MAGIC The parser resolves the full attribute chain.
 
 # COMMAND ----------
 
-BRANCH_SCHEMA = StructType(
-    [
-        # --- Primary Key ---
-        StructField("branchId", StringType(), nullable=False),
-        # --- Foreign Keys ---
-        StructField("bankId", StringType(), nullable=True),
-        # --- Audit Fields ---
-        StructField("createdOn", TimestampType(), nullable=True),
-        StructField("modifiedOn", TimestampType(), nullable=True),
-        # --- Status Fields ---
-        StructField("statecode", IntegerType(), nullable=False),
-        StructField("statecode_display", StringType(), nullable=True),
-        StructField("statuscode", IntegerType(), nullable=True),
-        StructField("statuscode_display", StringType(), nullable=True),
-        # --- Business Fields ---
-        StructField("name", StringType(), nullable=True),
-        StructField("branchCode", StringType(), nullable=True),
-        StructField("addressLine1", StringType(), nullable=True),
-        StructField("addressLine2", StringType(), nullable=True),
-        StructField("addressLine3", StringType(), nullable=True),
-        StructField("city", StringType(), nullable=True),
-        StructField("stateOrProvince", StringType(), nullable=True),
-        StructField("postalCode", StringType(), nullable=True),
-        StructField("country", StringType(), nullable=True),
-        StructField("telephone1", StringType(), nullable=True),
-        StructField("integrationKey", StringType(), nullable=True),
-    ]
-)
+print("=" * 60)
+print("Extension Resolution Demo: BankExtended → Bank")
+print("=" * 60)
+
+# Show the base Bank entity
+print("\n--- Standard CDM Bank (18 fields) ---")
+bank_base = cdm_parser.resolve_entity("standard/Bank.cdm.json", "Bank")
+for attr in bank_base["hasAttributes"]:
+    print(f"  {attr['name']:40s} {attr.get('dataType', 'string'):15s}")
+
+# Show the extended entity (inherits Bank + adds custom fields)
+print("\n--- BankExtended (inherits Bank + 5 custom fields) ---")
+bank_ext = cdm_parser.resolve_entity("extensions/BankExtended.cdm.json", "BankExtended")
+standard_count = len(bank_base["hasAttributes"])
+for i, attr in enumerate(bank_ext["hasAttributes"]):
+    marker = " ← EXTENSION" if i >= standard_count else ""
+    print(f"  {attr['name']:40s} {attr.get('dataType', 'string'):15s}{marker}")
+
+print(f"\nBase fields: {standard_count}")
+print(f"Extension fields: {len(bank_ext['hasAttributes']) - standard_count}")
+print(f"Total resolved: {len(bank_ext['hasAttributes'])}")
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Contact Entity Schema (Customer)
+# MAGIC ## Show Custom Entity: KYCCheck
 # MAGIC
-# MAGIC **CDM Source:** `FinancialServicesCommonDataModel/Contact.1.0.cdm.json`
-# MAGIC
-# MAGIC Represents a person with whom the bank has a relationship (customer, prospect, etc.).
-# MAGIC The CDM Contact entity maps to what banks typically refer to as a "Customer".
+# MAGIC This entity does NOT exist in the standard CDM.
+# MAGIC It was created for Belgian AML/CFT regulatory compliance.
 
 # COMMAND ----------
 
-CONTACT_SCHEMA = StructType(
-    [
-        # --- Primary Key ---
-        StructField("contactId", StringType(), nullable=False),
-        # --- Foreign Keys ---
-        StructField("branchId", StringType(), nullable=True),
-        # --- Audit Fields ---
-        StructField("createdOn", TimestampType(), nullable=True),
-        StructField("modifiedOn", TimestampType(), nullable=True),
-        # --- Status Fields ---
-        StructField("statecode", IntegerType(), nullable=False),
-        StructField("statecode_display", StringType(), nullable=True),
-        StructField("statuscode", IntegerType(), nullable=True),
-        StructField("statuscode_display", StringType(), nullable=True),
-        # --- Business Fields ---
-        StructField("firstName", StringType(), nullable=True),
-        StructField("lastName", StringType(), nullable=True),
-        StructField("fullName", StringType(), nullable=True),
-        StructField("emailAddress", StringType(), nullable=True),
-        StructField("telephone1", StringType(), nullable=True),
-        StructField("dateOfBirth", DateType(), nullable=True),
-        StructField("joinDate", TimestampType(), nullable=True),
-        StructField("tenureYears", DecimalType(18, 2), nullable=True),
-        StructField("isManagedByBankSystem", BooleanType(), nullable=True),
-        StructField("integrationKey", StringType(), nullable=True),
-    ]
-)
+print("=" * 60)
+print("Custom Entity: KYCCheck (not in standard CDM)")
+print("=" * 60)
+
+cdm_parser.print_entity_summary("extensions/KYCCheck.cdm.json", "KYCCheck")
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Account Entity Schema
+# MAGIC ## Show Option Sets (Lookup Values)
 # MAGIC
-# MAGIC **CDM Source:** `FinancialServicesCommonDataModel/Account.1.0.cdm.json`
-# MAGIC
-# MAGIC Represents a business/customer account at the bank.
-# MAGIC Linked to Branch and Contact entities.
+# MAGIC Option sets are parsed directly from the `.cdm.json` definitions.
 
 # COMMAND ----------
 
-ACCOUNT_SCHEMA = StructType(
-    [
-        # --- Primary Key ---
-        StructField("accountId", StringType(), nullable=False),
-        # --- Foreign Keys ---
-        StructField("branchId", StringType(), nullable=True),
-        StructField("primaryContactId", StringType(), nullable=True),
-        # --- Audit Fields ---
-        StructField("createdOn", TimestampType(), nullable=True),
-        StructField("modifiedOn", TimestampType(), nullable=True),
-        # --- Status Fields ---
-        StructField("statecode", IntegerType(), nullable=False),
-        StructField("statecode_display", StringType(), nullable=True),
-        StructField("statuscode", IntegerType(), nullable=True),
-        StructField("statuscode_display", StringType(), nullable=True),
-        # --- Business Fields ---
-        StructField("name", StringType(), nullable=True),
-        StructField("accountNumber", StringType(), nullable=True),
-        StructField("accountType", StringType(), nullable=True),
-        StructField("joinDate", TimestampType(), nullable=True),
-        StructField("tenureYears", DecimalType(18, 2), nullable=True),
-        StructField("integrationKey", StringType(), nullable=True),
-    ]
-)
+print("=" * 60)
+print("Option Sets — Parsed from .cdm.json")
+print("=" * 60)
+
+for entry in MANIFEST_ENTITIES:
+    name = entry["entityName"]
+    path, ename = cdm_parser._parse_entity_reference(entry["entityPath"])
+    option_sets = cdm_parser.get_option_sets(path, ename)
+    if option_sets:
+        print(f"\n  {name}:")
+        for field_name, values in option_sets.items():
+            print(f"    {field_name}:")
+            for v in values:
+                print(f"      {v['value']:>10} = {v['displayText']}")
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## FinancialHolding Entity Schema
+# MAGIC ## Build Schema Lookup for Downstream Notebooks
 # MAGIC
-# MAGIC **CDM Source:** `RetailBankingCoreDataModel/Financialholding.1.0.cdm.json`
-# MAGIC
-# MAGIC Represents a financial holding (e.g., deposit account, savings, loan).
-# MAGIC This is a simplified version of the CDM FinancialHolding entity
-# MAGIC capturing the most relevant attributes for a banking demo.
+# MAGIC Creates `CDM_SCHEMAS_BY_ENTITY` dict mapping logical entity names
+# MAGIC (bank, branch, etc.) to their PySpark StructType.
 
 # COMMAND ----------
 
-FINANCIAL_HOLDING_SCHEMA = StructType(
-    [
-        # --- Primary Key ---
-        StructField("financialHoldingId", StringType(), nullable=False),
-        # --- Foreign Keys ---
-        StructField("contactId", StringType(), nullable=True),
-        StructField("accountId", StringType(), nullable=True),
-        # --- Audit Fields ---
-        StructField("createdOn", TimestampType(), nullable=True),
-        StructField("modifiedOn", TimestampType(), nullable=True),
-        # --- Status Fields ---
-        StructField("statecode", IntegerType(), nullable=False),
-        StructField("statecode_display", StringType(), nullable=True),
-        StructField("statuscode", IntegerType(), nullable=True),
-        StructField("statuscode_display", StringType(), nullable=True),
-        # --- Business Fields ---
-        StructField("name", StringType(), nullable=True),
-        StructField("holdingType", IntegerType(), nullable=True),
-        StructField("holdingType_display", StringType(), nullable=True),
-        StructField("balance", DecimalType(18, 2), nullable=True),
-        StructField("balanceDefault", DecimalType(18, 2), nullable=True),
-        StructField("balanceDefaultDisplayValue", StringType(), nullable=True),
-        StructField("openedDate", TimestampType(), nullable=True),
-        StructField("maturityDate", TimestampType(), nullable=True),
-        StructField("interestRate", DecimalType(10, 4), nullable=True),
-        StructField("currencyCode", StringType(), nullable=True),
-        StructField("integrationKey", StringType(), nullable=True),
-    ]
-)
-
-# Lookup values for FinancialHolding type (CDM option set)
-FINANCIAL_HOLDING_TYPE_VALUES = {
-    104800000: "Deposit Account",
-    104800001: "Savings Account",
-    104800002: "Current Account",
-    104800003: "Loan",
-    104800004: "Line of Credit",
-    104800005: "Investment",
-    104800006: "Term Deposit",
-}
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## Schema Registry (for programmatic access)
-
-# COMMAND ----------
-
-CDM_SCHEMAS = {
-    "bank": BANK_SCHEMA,
-    "branch": BRANCH_SCHEMA,
-    "contact": CONTACT_SCHEMA,
-    "account": ACCOUNT_SCHEMA,
-    "financial_holding": FINANCIAL_HOLDING_SCHEMA,
-}
+# Map logical entity names → PySpark schemas
+CDM_SCHEMAS_BY_ENTITY = {}
+for entry in MANIFEST_ENTITIES:
+    cdm_name = entry["entityName"]
+    logical_name = _ENTITY_NAME_MAP.get(cdm_name, cdm_name.lower())
+    CDM_SCHEMAS_BY_ENTITY[logical_name] = CDM_SCHEMAS[cdm_name]
 
 
-def get_cdm_schema(entity_name: str) -> StructType:
-    """Retrieve the CDM PySpark schema for a given entity."""
-    if entity_name not in CDM_SCHEMAS:
+# Load CDM descriptions for Unity Catalog column comments
+CDM_DESCRIPTIONS = cdm_parser.load_all_descriptions_from_manifest()
+CDM_DESCRIPTIONS_BY_ENTITY = {}
+for entry in MANIFEST_ENTITIES:
+    cdm_name = entry["entityName"]
+    logical_name = _ENTITY_NAME_MAP.get(cdm_name, cdm_name.lower())
+    CDM_DESCRIPTIONS_BY_ENTITY[logical_name] = CDM_DESCRIPTIONS[cdm_name]
+
+
+def get_cdm_schema(entity_name: str):
+    """Retrieve the CDM PySpark schema for a given logical entity name."""
+    if entity_name not in CDM_SCHEMAS_BY_ENTITY:
         raise ValueError(
             f"Unknown entity: {entity_name}. "
-            f"Available: {list(CDM_SCHEMAS.keys())}"
+            f"Available: {list(CDM_SCHEMAS_BY_ENTITY.keys())}"
         )
-    return CDM_SCHEMAS[entity_name]
+    return CDM_SCHEMAS_BY_ENTITY[entity_name]
 
 
-def print_schema_summary():
-    """Print a summary of all CDM schemas."""
-    print("=" * 60)
-    print("CDM Banking Schema Registry")
-    print("=" * 60)
-    for name, schema in CDM_SCHEMAS.items():
-        fields = schema.fields
-        required = [f.name for f in fields if not f.nullable]
-        print(f"\n{name.upper()} ({len(fields)} fields)")
-        print(f"  Required: {', '.join(required) if required else 'None'}")
-        for field in fields:
-            nullable_flag = "" if field.nullable else " [REQUIRED]"
-            print(f"  - {field.name:35s} {str(field.dataType):20s}{nullable_flag}")
+def get_cdm_descriptions(entity_name: str) -> dict:
+    """Retrieve CDM entity and column descriptions for a given logical entity name.
 
-# COMMAND ----------
+    Returns:
+        Dict with 'entity_description' (str) and 'column_descriptions' (dict).
+    """
+    if entity_name not in CDM_DESCRIPTIONS_BY_ENTITY:
+        raise ValueError(
+            f"Unknown entity: {entity_name}. "
+            f"Available: {list(CDM_DESCRIPTIONS_BY_ENTITY.keys())}"
+        )
+    return CDM_DESCRIPTIONS_BY_ENTITY[entity_name]
 
-print_schema_summary()
+
+print("\n✓ Schema registry ready:")
+for name, schema in CDM_SCHEMAS_BY_ENTITY.items():
+    desc_info = CDM_DESCRIPTIONS_BY_ENTITY[name]
+    col_desc_count = len(desc_info["column_descriptions"])
+    print(f"  get_cdm_schema('{name}') → {len(schema.fields)} fields, {col_desc_count} column descriptions")

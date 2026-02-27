@@ -1,0 +1,192 @@
+{
+  "jsonSchemaSemanticVersion": "1.5.0",
+  "imports": [
+    { "corpusPath": "cdm:/foundations.4.3.cdm.json" }
+  ],
+  "definitions": [
+    {
+      "entityName": "FinancialHolding",
+      "exhibitsTraits": [
+        {
+          "traitReference": "is.CDM.entityVersion",
+          "arguments": [{ "name": "versionNumber", "value": "1.0" }]
+        }
+      ],
+      "description": "A financial holding such as a deposit, savings, loan. Source: RetailBankingCoreDataModel/Financialholding.1.0.cdm.json",
+      "sourceName": "msfsi_financialholding",
+      "hasAttributes": [
+        {
+          "name": "financialHoldingId",
+          "dataType": "entityId",
+          "isNullable": false,
+          "isPrimaryKey": true,
+          "description": "Unique identifier for the financial holding"
+        },
+        {
+          "name": "contactId",
+          "dataType": "entityId",
+          "isNullable": true,
+          "description": "Foreign key to the owning Contact"
+        },
+        {
+          "name": "accountId",
+          "dataType": "entityId",
+          "isNullable": true,
+          "description": "Foreign key to the associated Account"
+        },
+        {
+          "name": "createdOn",
+          "dataType": "dateTime",
+          "isNullable": true,
+          "description": "Date and time when the record was created"
+        },
+        {
+          "name": "modifiedOn",
+          "dataType": "dateTime",
+          "isNullable": true,
+          "description": "Date and time when the record was last modified"
+        },
+        {
+          "name": "statecode",
+          "dataType": "listLookup",
+          "isNullable": false,
+          "description": "Status of the holding. Values: 0=Active, 1=Inactive",
+          "optionSet": {
+            "values": [
+              { "value": 0, "displayText": "Active" },
+              { "value": 1, "displayText": "Inactive" }
+            ]
+          }
+        },
+        {
+          "name": "statecode_display",
+          "dataType": "string",
+          "isNullable": true,
+          "description": "Display text for statecode"
+        },
+        {
+          "name": "statuscode",
+          "dataType": "listLookup",
+          "isNullable": true,
+          "description": "Reason for the status",
+          "optionSet": {
+            "values": [
+              { "value": 1, "displayText": "Active" },
+              { "value": 2, "displayText": "Inactive" }
+            ]
+          }
+        },
+        {
+          "name": "statuscode_display",
+          "dataType": "string",
+          "isNullable": true,
+          "description": "Display text for statuscode"
+        },
+        {
+          "name": "name",
+          "dataType": "string",
+          "isNullable": true,
+          "description": "Name or description of the financial holding"
+        },
+        {
+          "name": "holdingType",
+          "dataType": "listLookup",
+          "isNullable": true,
+          "description": "Type of financial holding",
+          "optionSet": {
+            "values": [
+              { "value": 104800000, "displayText": "Deposit Account" },
+              { "value": 104800001, "displayText": "Savings Account" },
+              { "value": 104800002, "displayText": "Current Account" },
+              { "value": 104800003, "displayText": "Loan" },
+              { "value": 104800004, "displayText": "Line of Credit" },
+              { "value": 104800005, "displayText": "Investment" },
+              { "value": 104800006, "displayText": "Term Deposit" }
+            ]
+          }
+        },
+        {
+          "name": "holdingType_display",
+          "dataType": "string",
+          "isNullable": true,
+          "description": "Display text for holdingType"
+        },
+        {
+          "name": "balance",
+          "dataType": "decimal",
+          "isNullable": true,
+          "description": "Current balance in the holding currency",
+          "traits": [
+            {
+              "traitReference": "is.dataFormat.numeric.shaped",
+              "arguments": [
+                { "name": "precision", "value": "18" },
+                { "name": "scale", "value": "2" }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "balanceDefault",
+          "dataType": "decimal",
+          "isNullable": true,
+          "description": "Balance in the default/base currency",
+          "traits": [
+            {
+              "traitReference": "is.dataFormat.numeric.shaped",
+              "arguments": [
+                { "name": "precision", "value": "18" },
+                { "name": "scale", "value": "2" }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "balanceDefaultDisplayValue",
+          "dataType": "string",
+          "isNullable": true,
+          "description": "Formatted display value for the default balance"
+        },
+        {
+          "name": "openedDate",
+          "dataType": "dateTime",
+          "isNullable": true,
+          "description": "Date the holding was opened"
+        },
+        {
+          "name": "maturityDate",
+          "dataType": "dateTime",
+          "isNullable": true,
+          "description": "Maturity date (for term deposits, loans)"
+        },
+        {
+          "name": "interestRate",
+          "dataType": "decimal",
+          "isNullable": true,
+          "description": "Interest rate percentage",
+          "traits": [
+            {
+              "traitReference": "is.dataFormat.numeric.shaped",
+              "arguments": [
+                { "name": "precision", "value": "10" },
+                { "name": "scale", "value": "4" }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "currencyCode",
+          "dataType": "string",
+          "isNullable": true,
+          "description": "ISO 4217 currency code"
+        },
+        {
+          "name": "integrationKey",
+          "dataType": "string",
+          "isNullable": true,
+          "description": "Integration key for cross-system identification"
+        }
+      ]
+    }
+  ]
+}

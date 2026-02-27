@@ -1,0 +1,148 @@
+{
+  "jsonSchemaSemanticVersion": "1.5.0",
+  "imports": [
+    { "corpusPath": "cdm:/foundations.4.3.cdm.json" }
+  ],
+  "definitions": [
+    {
+      "entityName": "Branch",
+      "exhibitsTraits": [
+        {
+          "traitReference": "is.CDM.entityVersion",
+          "arguments": [{ "name": "versionNumber", "value": "1.0" }]
+        }
+      ],
+      "description": "Represents a bank branch. Source: FinancialServicesCommonDataModel/Branch.1.0.cdm.json",
+      "sourceName": "msfsi_branch",
+      "hasAttributes": [
+        {
+          "name": "branchId",
+          "dataType": "entityId",
+          "isNullable": false,
+          "isPrimaryKey": true,
+          "description": "Unique identifier for the branch"
+        },
+        {
+          "name": "bankId",
+          "dataType": "entityId",
+          "isNullable": true,
+          "description": "Foreign key to the parent Bank entity"
+        },
+        {
+          "name": "createdOn",
+          "dataType": "dateTime",
+          "isNullable": true,
+          "description": "Date and time when the record was created"
+        },
+        {
+          "name": "modifiedOn",
+          "dataType": "dateTime",
+          "isNullable": true,
+          "description": "Date and time when the record was last modified"
+        },
+        {
+          "name": "statecode",
+          "dataType": "listLookup",
+          "isNullable": false,
+          "description": "Status of the branch. Values: 0=Active, 1=Inactive",
+          "optionSet": {
+            "values": [
+              { "value": 0, "displayText": "Active" },
+              { "value": 1, "displayText": "Inactive" }
+            ]
+          }
+        },
+        {
+          "name": "statecode_display",
+          "dataType": "string",
+          "isNullable": true,
+          "description": "Display text for statecode"
+        },
+        {
+          "name": "statuscode",
+          "dataType": "listLookup",
+          "isNullable": true,
+          "description": "Reason for the status. Values: 1=Active, 2=Inactive",
+          "optionSet": {
+            "values": [
+              { "value": 1, "displayText": "Active" },
+              { "value": 2, "displayText": "Inactive" }
+            ]
+          }
+        },
+        {
+          "name": "statuscode_display",
+          "dataType": "string",
+          "isNullable": true,
+          "description": "Display text for statuscode"
+        },
+        {
+          "name": "name",
+          "dataType": "string",
+          "isNullable": true,
+          "description": "Name of the branch"
+        },
+        {
+          "name": "branchCode",
+          "dataType": "string",
+          "isNullable": true,
+          "description": "Branch identification code"
+        },
+        {
+          "name": "addressLine1",
+          "dataType": "string",
+          "isNullable": true,
+          "description": "First line of the street address"
+        },
+        {
+          "name": "addressLine2",
+          "dataType": "string",
+          "isNullable": true,
+          "description": "Second line of the street address"
+        },
+        {
+          "name": "addressLine3",
+          "dataType": "string",
+          "isNullable": true,
+          "description": "Third line of the street address"
+        },
+        {
+          "name": "city",
+          "dataType": "string",
+          "isNullable": true,
+          "description": "City"
+        },
+        {
+          "name": "stateOrProvince",
+          "dataType": "string",
+          "isNullable": true,
+          "description": "State or province"
+        },
+        {
+          "name": "postalCode",
+          "dataType": "string",
+          "isNullable": true,
+          "description": "ZIP/postal code"
+        },
+        {
+          "name": "country",
+          "dataType": "string",
+          "isNullable": true,
+          "description": "Country (ISO 3166-1 alpha-2)"
+        },
+        {
+          "name": "telephone1",
+          "dataType": "string",
+          "isNullable": true,
+          "description": "Primary phone number"
+        },
+        {
+          "name": "integrationKey",
+          "dataType": "string",
+          "isNullable": true,
+          "description": "Integration key for cross-system identification"
+        }
+      ]
+    }
+  ]
+}

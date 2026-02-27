@@ -1,23 +1,29 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC # 04 - Pipeline Orchestrator
+# MAGIC # 04 - Pipeline Orchestrator (Production)
 # MAGIC
-# MAGIC This notebook orchestrates the full **Bronze -> Silver** CDM banking data pipeline.
+# MAGIC End-to-end pipeline: **Bronze → Silver → Validate**
 # MAGIC
-# MAGIC ## Pipeline Steps:
-# MAGIC 1. **Setup** — Load configuration and CDM schemas
-# MAGIC 2. **Bronze** — Generate synthetic raw banking data with data quality issues
-# MAGIC 3. **Silver** — Transform and clean data to CDM-conformant canonical layer
-# MAGIC 4. **Validate** — Run data quality checks on the silver layer
+# MAGIC ## Production Architecture Demonstrated:
 # MAGIC
-# MAGIC ## CDM Entities:
-# MAGIC | Entity | CDM Source | Description |
-# MAGIC |--------|-----------|-------------|
-# MAGIC | Bank | `FinancialServicesCommonDataModel/Bank` | Bank institution |
-# MAGIC | Branch | `FinancialServicesCommonDataModel/Branch` | Bank branches |
-# MAGIC | Contact | `FinancialServicesCommonDataModel/Contact` | Customers/contacts |
-# MAGIC | Account | `FinancialServicesCommonDataModel/Account` | Customer accounts |
-# MAGIC | FinancialHolding | `RetailBankingCoreDataModel/Financialholding` | Financial products |
+# MAGIC | Component | Demo (old) | Production (this) |
+# MAGIC |-----------|-----------|-------------------|
+# MAGIC | Schema source | Hand-coded `StructType` | Parsed from `.cdm.json` at runtime |
+# MAGIC | Extensions | Not supported | `extendsEntity` in `BankExtended.cdm.json` |
+# MAGIC | Custom entities | Not supported | `KYCCheck.cdm.json` |
+# MAGIC | Column mappings | Hardcoded in Python | `config/entity_mappings.yaml` |
+# MAGIC | Quality rules | Post-hoc print statements | `config/quality_rules.yaml` + engine |
+# MAGIC | CDM reference | Not used | `cdm_schemas/manifest.cdm.json` |
+# MAGIC
+# MAGIC ## Entities:
+# MAGIC | Entity | Type | CDM Schema |
+# MAGIC |--------|------|-----------|
+# MAGIC | Bank | **Extended** | `BankExtended.cdm.json` (extends `Bank.cdm.json`) |
+# MAGIC | Branch | Standard | `Branch.cdm.json` |
+# MAGIC | Contact | Standard | `Contact.cdm.json` |
+# MAGIC | Account | Standard | `Account.cdm.json` |
+# MAGIC | FinancialHolding | Standard | `FinancialHolding.cdm.json` |
+# MAGIC | KYCCheck | **Custom** | `KYCCheck.cdm.json` (net-new, not in CDM) |
 
 # COMMAND ----------
 
@@ -35,18 +41,15 @@
 # COMMAND ----------
 
 print_config()
-print()
-print_schema_summary()
 
 # COMMAND ----------
 
 # MAGIC %md
 # MAGIC ## Step 2: Generate Bronze Data
 # MAGIC
-# MAGIC Creates synthetic raw data simulating messy source system exports:
-# MAGIC - Inconsistent date formats, mixed case, extra whitespace
-# MAGIC - Missing values and duplicates
-# MAGIC - Non-standard status/boolean representations
+# MAGIC Creates synthetic raw data, now including:
+# MAGIC - **BankExtended fields** (riskRating, swiftCode, nbbLicense, etc.)
+# MAGIC - **KYCCheck records** (custom entity for AML/KYC compliance)
 
 # COMMAND ----------
 
@@ -63,31 +66,25 @@ print("=" * 60)
 print("Bronze Layer Summary")
 print("=" * 60)
 
-bronze_summary = []
 for entity in CDM_ENTITIES:
     df = spark.read.format("delta").load(get_bronze_path(entity))
     count = df.count()
     cols = len(df.columns)
-    bronze_summary.append({
-        "entity": CDM_ENTITIES[entity],
-        "records": count,
-        "columns": cols,
-        "path": get_bronze_path(entity),
-    })
-    print(f"  {CDM_ENTITIES[entity]:25s}  {count:6d} records  {cols:3d} columns")
+    tag = ""
+    if entity == "bank":
+        tag = " (includes BankExtended fields)"
+    elif entity == "kyc_check":
+        tag = " (CUSTOM ENTITY)"
+    print(f"  {CDM_ENTITIES[entity]:25s}  {count:6d} records  {cols:3d} columns{tag}")
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Step 3: Bronze -> Silver Transformations
+# MAGIC ## Step 3: Bronze → Silver (Config-Driven)
 # MAGIC
-# MAGIC Transforms raw bronze data to CDM-conformant silver:
-# MAGIC - Column renaming to CDM attribute names
-# MAGIC - Date/time format standardization
-# MAGIC - Status code resolution (CDM option sets)
-# MAGIC - Deduplication
-# MAGIC - String normalization (trim, proper case)
-# MAGIC - Schema enforcement (PySpark StructType)
+# MAGIC Transformations are driven by `config/entity_mappings.yaml`.
+# MAGIC The `TransformEngine` reads the YAML, applies registered transforms,
+# MAGIC and enforces CDM schemas parsed from `.cdm.json` files.
 
 # COMMAND ----------
 
@@ -96,31 +93,7 @@ for entity in CDM_ENTITIES:
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ### Silver Data Summary
-
-# COMMAND ----------
-
-print("=" * 60)
-print("Silver Layer Summary (CDM Conformant)")
-print("=" * 60)
-
-silver_summary = []
-for entity in CDM_ENTITIES:
-    df = spark.read.format("delta").load(get_silver_path(entity))
-    count = df.count()
-    cols = len(df.columns)
-    silver_summary.append({
-        "entity": CDM_ENTITIES[entity],
-        "records": count,
-        "columns": cols,
-        "path": get_silver_path(entity),
-    })
-    print(f"  {CDM_ENTITIES[entity]:25s}  {count:6d} records  {cols:3d} columns")
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## Step 4: Data Quality Comparison (Bronze vs Silver)
+# MAGIC ## Step 4: Data Quality Comparison
 
 # COMMAND ----------
 
@@ -140,7 +113,7 @@ for entity in CDM_ENTITIES:
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Step 5: Silver Schema Validation
+# MAGIC ## Step 5: CDM Schema Compliance Validation
 
 # COMMAND ----------
 
@@ -148,11 +121,11 @@ print("=" * 60)
 print("Silver Schema Validation — CDM Compliance Check")
 print("=" * 60)
 
-for entity_name, expected_schema in CDM_SCHEMAS.items():
+for entity_name in CDM_ENTITIES:
+    expected_schema = get_cdm_schema(entity_name)
     silver_df = spark.read.format("delta").load(get_silver_path(entity_name))
     actual_schema = silver_df.schema
 
-    # Compare field names
     expected_fields = {f.name for f in expected_schema.fields}
     actual_fields = {f.name for f in actual_schema.fields}
 
@@ -189,31 +162,96 @@ for entity_name, expected_schema in CDM_SCHEMAS.items():
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Pipeline Complete!
+# MAGIC ## Step 6: Data Quality Validation (Rule-Based)
 # MAGIC
-# MAGIC ### What was demonstrated:
-# MAGIC
-# MAGIC 1. **CDM Schema Definitions** — PySpark StructTypes derived from the official
-# MAGIC    [Microsoft CDM FinancialServices](https://github.com/microsoft/CDM/tree/master/schemaDocuments/FinancialServices) entities
-# MAGIC
-# MAGIC 2. **Bronze Layer** — Synthetic raw data with realistic data quality issues
-# MAGIC    (inconsistent formats, nulls, duplicates, mixed case)
-# MAGIC
-# MAGIC 3. **Silver Layer** — Clean, CDM-conformant canonical data with:
-# MAGIC    - Standardized column names matching CDM attributes
-# MAGIC    - Proper data types (timestamps, decimals, booleans)
-# MAGIC    - CDM option set resolution (statecode, statuscode, holdingType)
-# MAGIC    - Deduplication and data cleansing
-# MAGIC
-# MAGIC ### CDM Entity Relationship:
-# MAGIC ```
-# MAGIC Bank (1) ──→ (N) Branch (1) ──→ (N) Contact (Customer)
-# MAGIC                         │                    │
-# MAGIC                         └──→ (N) Account ←───┘
-# MAGIC                                    │
-# MAGIC                              (1) ──→ (N) FinancialHolding
-# MAGIC ```
+# MAGIC Quality rules are defined in `config/quality_rules.yaml` and executed
+# MAGIC by the `QualityEngine`. Rules include null checks, uniqueness, referential
+# MAGIC integrity, value ranges, string patterns, and completeness thresholds.
 
 # COMMAND ----------
 
-print("\n✓ CDM Banking Demo Pipeline — Complete")
+# Initialize the quality engine
+quality_engine = QualityEngine(QUALITY_RULES_PATH, spark)
+
+# Load all silver DataFrames for referential integrity checks
+silver_dfs = {}
+for entity_name in CDM_ENTITIES:
+    silver_dfs[entity_name] = spark.read.format("delta").load(get_silver_path(entity_name))
+
+# Run quality validation for all entities
+all_quality_results = {}
+for entity_name in CDM_ENTITIES:
+    results = quality_engine.validate_entity(
+        entity_name,
+        silver_dfs[entity_name],
+        reference_dfs=silver_dfs,
+    )
+    all_quality_results[entity_name] = results
+
+# Print full quality report
+quality_engine.print_full_report(all_quality_results)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Step 7: Field Completeness Report
+
+# COMMAND ----------
+
+print("=" * 60)
+print("Field Completeness Report — Silver Layer")
+print("=" * 60)
+
+for entity_name in CDM_ENTITIES:
+    schema = get_cdm_schema(entity_name)
+    silver_df = silver_dfs[entity_name]
+    total_count = silver_df.count()
+
+    print(f"\n  {CDM_ENTITIES[entity_name]} ({total_count} records):")
+
+    for field in schema.fields:
+        null_count = silver_df.filter(silver_df[field.name].isNull()).count()
+        completeness = ((total_count - null_count) / total_count * 100) if total_count > 0 else 0
+        bar_len = int(completeness / 5)
+        bar = "█" * bar_len + "░" * (20 - bar_len)
+        req = " [REQ]" if not field.nullable else ""
+        print(f"    {field.name:35s} {bar} {completeness:5.1f}%{req}")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Pipeline Complete!
+# MAGIC
+# MAGIC ### What was demonstrated (Production approach):
+# MAGIC
+# MAGIC 1. **Dynamic CDM schemas** — Parsed from `.cdm.json` files, not hand-coded
+# MAGIC 2. **Entity extensions** — `BankExtended` inherits all Bank fields + adds custom fields
+# MAGIC 3. **Custom entities** — `KYCCheck` created for AML/KYC (not in standard CDM)
+# MAGIC 4. **Config-driven transforms** — Column mappings in `entity_mappings.yaml`
+# MAGIC 5. **Rule-based quality validation** — Quality rules in `quality_rules.yaml`
+# MAGIC 6. **No CDM repo fork** — Standard schemas in `standard/`, extensions in `extensions/`
+# MAGIC
+# MAGIC ### Entity Relationship:
+# MAGIC ```
+# MAGIC Bank/BankExtended (1) ──→ (N) Branch (1) ──→ (N) Contact (Customer)
+# MAGIC                                    │                    │
+# MAGIC                                    └──→ (N) Account ←───┘
+# MAGIC                                               │
+# MAGIC                                         (1) ──→ (N) FinancialHolding
+# MAGIC                                                 │
+# MAGIC                               Contact (1) ──→ (N) KYCCheck [CUSTOM]
+# MAGIC ```
+# MAGIC
+# MAGIC ### How to extend this for your organization:
+# MAGIC
+# MAGIC | Task | What to do |
+# MAGIC |------|-----------|
+# MAGIC | Add field to existing entity | Create extension `.cdm.json` with `extendsEntity` |
+# MAGIC | Add new entity | Create `.cdm.json` in `extensions/`, add to manifest |
+# MAGIC | Change source column name | Edit `config/entity_mappings.yaml` |
+# MAGIC | Add quality rule | Edit `config/quality_rules.yaml` |
+# MAGIC | Add transform function | Register in `lib/transform_engine.py` |
+
+# COMMAND ----------
+
+print("\n✓ CDM Banking Demo Pipeline (Production) — Complete")

@@ -1,0 +1,58 @@
+{
+  "jsonSchemaSemanticVersion": "1.5.0",
+  "imports": [
+    { "corpusPath": "../standard/Bank.cdm.json" }
+  ],
+  "definitions": [
+    {
+      "entityName": "BankExtended",
+      "extendsEntity": "standard/Bank.cdm.json/Bank",
+      "exhibitsTraits": [
+        {
+          "traitReference": "is.CDM.entityVersion",
+          "arguments": [{ "name": "versionNumber", "value": "1.0" }]
+        },
+        {
+          "traitReference": "is.extension",
+          "arguments": [
+            { "name": "organizationName", "value": "Contoso Banking Group" },
+            { "name": "extensionPurpose", "value": "Adds Belgian regulatory, risk, and channel fields to the standard CDM Bank entity" }
+          ]
+        }
+      ],
+      "description": "Extended Bank entity with organization-specific fields for Belgian banking operations. Inherits all attributes from the standard CDM Bank entity and adds risk classification, SWIFT codes, regulatory license, onboarding channel, and PSD2 compliance tracking.",
+      "hasAttributes": [
+        {
+          "name": "riskRating",
+          "dataType": "integer",
+          "isNullable": true,
+          "description": "Internal institutional risk rating (1=Very Low, 2=Low, 3=Medium, 4=High, 5=Very High)"
+        },
+        {
+          "name": "swiftCode",
+          "dataType": "string",
+          "isNullable": true,
+          "description": "SWIFT/BIC code for international transfers"
+        },
+        {
+          "name": "regulatoryLicenseNumber",
+          "dataType": "string",
+          "isNullable": true,
+          "description": "National Bank of Belgium (NBB) regulatory license number"
+        },
+        {
+          "name": "onboardingChannel",
+          "dataType": "string",
+          "isNullable": true,
+          "description": "Channel through which the bank was onboarded (Digital, Branch, Partnership, Acquisition)"
+        },
+        {
+          "name": "isPSD2Compliant",
+          "dataType": "boolean",
+          "isNullable": true,
+          "description": "Whether the bank is compliant with PSD2 (Payment Services Directive 2) regulations"
+        }
+      ]
+    }
+  ]
+}
