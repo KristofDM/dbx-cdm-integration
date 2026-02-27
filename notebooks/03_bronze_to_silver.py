@@ -46,6 +46,7 @@ spark = SparkSession.builder.getOrCreate()
 
 # COMMAND ----------
 
+# DBTITLE 1,Untitled
 def parse_flexible_timestamp(col_name: str, output_alias: str = None) -> F.Column:
     """
     Parse a string column with inconsistent date/time formats into a TimestampType.
@@ -61,9 +62,6 @@ def parse_flexible_timestamp(col_name: str, output_alias: str = None) -> F.Colum
         F.to_timestamp(F.col(col_name), "yyyy-MM-dd"),
         F.to_timestamp(F.col(col_name), "MM/dd/yyyy"),
         F.to_timestamp(F.col(col_name), "dd/MM/yyyy"),
-    ).alias(alias)
-
-
 def parse_flexible_date(col_name: str, output_alias: str = None) -> F.Column:
     """Parse a string column with inconsistent date formats into a DateType."""
     alias = output_alias or col_name
@@ -73,9 +71,6 @@ def parse_flexible_date(col_name: str, output_alias: str = None) -> F.Column:
         F.to_date(F.col(col_name), "MM/dd/yyyy"),
         F.to_date(F.col(col_name), "yyyy/MM/dd"),
     ).alias(alias)
-
-
-def normalize_boolean(col_name: str) -> F.Column:
     """
     Convert various boolean representations to a proper BooleanType.
     Handles: yes/no, true/false, 1/0, Y/N, active/inactive

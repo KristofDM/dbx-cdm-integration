@@ -45,13 +45,13 @@ SILVER_PATH = f"{BASE_PATH}/silver"
 
 # --- Unity Catalog Settings ---
 # Uncomment below if using Unity Catalog instead of DBFS paths
-# CATALOG_NAME = "cdm_banking_demo"
-# SCHEMA_BRONZE = "bronze"
-# SCHEMA_SILVER = "silver"
+CATALOG_NAME = "cdm_banking_demo"
+SCHEMA_BRONZE = "bronze"
+SCHEMA_SILVER = "silver"
 
 # To use Unity Catalog tables instead of Delta paths:
-# USE_UNITY_CATALOG = True
-USE_UNITY_CATALOG = False
+USE_UNITY_CATALOG = True
+# USE_UNITY_CATALOG = False
 
 # COMMAND ----------
 
