@@ -90,7 +90,7 @@ def run_all_transformations():
 
         # 1. Read bronze data
         bronze_path = get_bronze_path(entity_name)
-        bronze_df = spark.read.format("delta").load(bronze_path)
+        bronze_df = read_bronze(entity_name)
         bronze_count = bronze_df.count()
         print(f"  Bronze records: {bronze_count}")
 
@@ -114,9 +114,7 @@ def run_all_transformations():
             silver_df,
             silver_path,
             cdm_display_name,
-            catalog_name=CATALOG_NAME if USE_UNITY_CATALOG else None,
-            schema_name=SCHEMA_SILVER if USE_UNITY_CATALOG else None,
-            table_name=entity_name if USE_UNITY_CATALOG else None,
+            table_fqn=get_silver_table_fqn(entity_name) if USE_UNITY_CATALOG else None,
             entity_description=desc_info["entity_description"],
             column_descriptions=desc_info["column_descriptions"],
         )
@@ -147,7 +145,7 @@ print("=" * 60)
 print("BankExtended — Silver Layer Verification")
 print("=" * 60)
 
-bank_silver = spark.read.format("delta").load(get_silver_path("bank"))
+bank_silver = read_silver("bank")
 
 # Identify which fields are extensions
 bank_base = cdm_parser.resolve_entity("standard/Bank.cdm.json", "Bank")
@@ -179,7 +177,7 @@ print("=" * 60)
 print("KYCCheck — Custom Entity Silver Verification")
 print("=" * 60)
 
-kyc_silver = spark.read.format("delta").load(get_silver_path("kyc_check"))
+kyc_silver = read_silver("kyc_check")
 print(f"\n  Records: {kyc_silver.count()}")
 print(f"  Fields: {len(kyc_silver.schema.fields)}")
 print("\n  Schema:")
@@ -200,7 +198,7 @@ print("Silver Layer Summary")
 print("=" * 60)
 
 for entity in CDM_ENTITIES:
-    df = spark.read.format("delta").load(get_silver_path(entity))
+    df = read_silver(entity)
     count = df.count()
     cols = len(df.columns)
     print(f"  {CDM_ENTITIES[entity]:25s}  {count:6d} records  {cols:3d} columns")

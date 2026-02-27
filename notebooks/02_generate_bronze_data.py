@@ -445,6 +445,20 @@ def generate_bronze_kyc_checks(count: int, contact_ids: list) -> list:
 
 # COMMAND ----------
 
+def _write_bronze_table(df, entity_name: str, label: str):
+    """Write a bronze DataFrame — UC managed table if enabled, otherwise path-based."""
+    if USE_UNITY_CATALOG:
+        fqn = get_bronze_table_fqn(entity_name)
+        df.write.format("delta").mode("overwrite").option(
+            "overwriteSchema", "true"
+        ).saveAsTable(fqn)
+        print(f"   Written {df.count()} records to {fqn}")
+    else:
+        path = get_bronze_path(entity_name)
+        df.write.format("delta").mode("overwrite").save(path)
+        print(f"   Written {df.count()} records to {path}")
+
+
 def write_bronze_data():
     """Generate and write all bronze data to Delta tables."""
     print("=" * 60)
@@ -455,24 +469,21 @@ def write_bronze_data():
     print("\n1. Generating Bank data (with extension fields)...")
     bank_records = generate_bronze_banks(BRONZE_RECORD_COUNTS["bank"])
     bank_df = spark.createDataFrame([Row(**r) for r in bank_records])
-    bank_df.write.format("delta").mode("overwrite").save(get_bronze_path("bank"))
-    print(f"   Written {bank_df.count()} records to {get_bronze_path('bank')}")
+    _write_bronze_table(bank_df, "bank", "Bank")
     bank_ids = [r["src_bank_id"] for r in bank_records]
 
     # --- 2. Branches ---
     print("\n2. Generating Branch data...")
     branch_records = generate_bronze_branches(BRONZE_RECORD_COUNTS["branch"], bank_ids)
     branch_df = spark.createDataFrame([Row(**r) for r in branch_records])
-    branch_df.write.format("delta").mode("overwrite").save(get_bronze_path("branch"))
-    print(f"   Written {branch_df.count()} records to {get_bronze_path('branch')}")
+    _write_bronze_table(branch_df, "branch", "Branch")
     branch_ids = [r["branch_id"] for r in branch_records]
 
     # --- 3. Contacts ---
     print("\n3. Generating Contact data...")
     contact_records = generate_bronze_contacts(BRONZE_RECORD_COUNTS["contact"], branch_ids)
     contact_df = spark.createDataFrame([Row(**r) for r in contact_records])
-    contact_df.write.format("delta").mode("overwrite").save(get_bronze_path("contact"))
-    print(f"   Written {contact_df.count()} records to {get_bronze_path('contact')}")
+    _write_bronze_table(contact_df, "contact", "Contact")
     contact_ids = [r["customer_id"] for r in contact_records]
 
     # --- 4. Accounts ---
@@ -481,8 +492,7 @@ def write_bronze_data():
         BRONZE_RECORD_COUNTS["account"], branch_ids, contact_ids
     )
     account_df = spark.createDataFrame([Row(**r) for r in account_records])
-    account_df.write.format("delta").mode("overwrite").save(get_bronze_path("account"))
-    print(f"   Written {account_df.count()} records to {get_bronze_path('account')}")
+    _write_bronze_table(account_df, "account", "Account")
     account_ids = [r["acct_id"] for r in account_records]
 
     # --- 5. Financial Holdings ---
@@ -491,8 +501,7 @@ def write_bronze_data():
         BRONZE_RECORD_COUNTS["financial_holding"], contact_ids, account_ids
     )
     holding_df = spark.createDataFrame([Row(**r) for r in holding_records])
-    holding_df.write.format("delta").mode("overwrite").save(get_bronze_path("financial_holding"))
-    print(f"   Written {holding_df.count()} records to {get_bronze_path('financial_holding')}")
+    _write_bronze_table(holding_df, "financial_holding", "FinancialHolding")
 
     # --- 6. KYC Checks (CUSTOM ENTITY) ---
     print("\n6. Generating KYCCheck data (custom entity)...")
@@ -500,8 +509,7 @@ def write_bronze_data():
         BRONZE_RECORD_COUNTS["kyc_check"], contact_ids
     )
     kyc_df = spark.createDataFrame([Row(**r) for r in kyc_records])
-    kyc_df.write.format("delta").mode("overwrite").save(get_bronze_path("kyc_check"))
-    print(f"   Written {kyc_df.count()} records to {get_bronze_path('kyc_check')}")
+    _write_bronze_table(kyc_df, "kyc_check", "KYCCheck")
 
     print("\n" + "=" * 60)
     print("Bronze data generation complete!")
@@ -537,7 +545,7 @@ for entity in CDM_ENTITIES:
     print(f"\n{'='*60}")
     print(f"BRONZE - {CDM_ENTITIES[entity]}")
     print(f"{'='*60}")
-    df = spark.read.format("delta").load(get_bronze_path(entity))
+    df = read_bronze(entity)
     print(f"Record count: {df.count()}")
     print(f"Schema:")
     df.printSchema()

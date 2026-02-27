@@ -37,6 +37,10 @@ from cdm_schema_parser import CdmSchemaParser
 from transform_engine import TransformEngine
 from quality_engine import QualityEngine
 
+# SparkSession — pre-initialized in Databricks, explicit import for clarity
+from pyspark.sql import SparkSession
+spark = SparkSession.builder.getOrCreate()
+
 print(f"Project root: {_PROJECT_ROOT}")
 print(f"Lib path:     {os.path.join(_PROJECT_ROOT, 'lib')}")
 print("✓ All library modules loaded")
@@ -145,6 +149,30 @@ def get_silver_path(entity: str) -> str:
     """Get the silver Delta table path for a given entity."""
     return SILVER_TABLES[entity]
 
+
+def get_bronze_table_fqn(entity: str) -> str:
+    """Get the fully qualified Unity Catalog table name for a bronze entity."""
+    return f"`{CATALOG_NAME}`.`{SCHEMA_BRONZE}`.`{entity}`"
+
+
+def get_silver_table_fqn(entity: str) -> str:
+    """Get the fully qualified Unity Catalog table name for a silver entity."""
+    return f"`{CATALOG_NAME}`.`{SCHEMA_SILVER}`.`{entity}`"
+
+
+def read_bronze(entity: str):
+    """Read a bronze table — from UC if enabled, otherwise from path."""
+    if USE_UNITY_CATALOG:
+        return spark.table(get_bronze_table_fqn(entity))
+    return spark.read.format("delta").load(get_bronze_path(entity))
+
+
+def read_silver(entity: str):
+    """Read a silver table — from UC if enabled, otherwise from path."""
+    if USE_UNITY_CATALOG:
+        return spark.table(get_silver_table_fqn(entity))
+    return spark.read.format("delta").load(get_silver_path(entity))
+
 # COMMAND ----------
 
 # MAGIC %md
@@ -167,6 +195,40 @@ RANDOM_SEED = 42
 
 # MAGIC %md
 # MAGIC ## Configuration Summary
+
+# COMMAND ----------
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Unity Catalog Initialization
+# MAGIC
+# MAGIC When `USE_UNITY_CATALOG = True`, creates the catalog and
+# MAGIC bronze/silver schemas so that tables can be registered.
+
+# COMMAND ----------
+
+def setup_unity_catalog():
+    """Create the Unity Catalog, bronze schema, and silver schema if they don't exist."""
+    if not USE_UNITY_CATALOG:
+        print("Unity Catalog disabled — skipping setup")
+        return
+
+    try:
+        spark.sql(f"CREATE CATALOG IF NOT EXISTS `{CATALOG_NAME}`")
+        spark.sql(f"USE CATALOG `{CATALOG_NAME}`")
+        spark.sql(f"CREATE SCHEMA IF NOT EXISTS `{CATALOG_NAME}`.`{SCHEMA_BRONZE}`")
+        spark.sql(f"CREATE SCHEMA IF NOT EXISTS `{CATALOG_NAME}`.`{SCHEMA_SILVER}`")
+        print(f"✓ Unity Catalog ready:")
+        print(f"  Catalog: {CATALOG_NAME}")
+        print(f"  Schemas: {SCHEMA_BRONZE}, {SCHEMA_SILVER}")
+    except Exception as e:
+        print(f"⚠ Unity Catalog setup failed: {e}")
+        print("  Tables will still be written as Delta files (path-based).")
+
+
+if USE_UNITY_CATALOG:
+    setup_unity_catalog()
 
 # COMMAND ----------
 

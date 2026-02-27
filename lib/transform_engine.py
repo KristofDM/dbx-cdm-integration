@@ -401,67 +401,64 @@ class TransformEngine:
         df: DataFrame,
         silver_path: str,
         entity_display_name: str,
-        catalog_name: Optional[str] = None,
-        schema_name: Optional[str] = None,
-        table_name: Optional[str] = None,
+        table_fqn: Optional[str] = None,
         entity_description: Optional[str] = None,
         column_descriptions: Optional[Dict[str, str]] = None,
     ) -> DataFrame:
         """
-        Write transformed data to the silver layer as Delta.
+        Write transformed data to the silver layer.
 
-        If Unity Catalog parameters are provided, registers the table and
-        applies CDM entity/column descriptions as UC COMMENT metadata.
+        When table_fqn is provided (Unity Catalog enabled), writes using
+        saveAsTable to a UC-managed table and applies CDM entity/column
+        descriptions as metadata COMMENTs.
+
+        When table_fqn is None, falls back to path-based Delta write.
 
         Args:
             df: Transformed DataFrame
-            silver_path: Delta path for the silver table
+            silver_path: Fallback Delta path (used when UC is disabled)
             entity_display_name: Human-readable entity name for logging
-            catalog_name: Unity Catalog catalog name (optional)
-            schema_name: Unity Catalog schema name (optional)
-            table_name: Unity Catalog table name (optional)
+            table_fqn: Fully qualified UC table name, e.g. `catalog`.`schema`.`table` (optional)
             entity_description: CDM entity description for TABLE COMMENT (optional)
             column_descriptions: Dict of {column_name: description} for COLUMN COMMENTs (optional)
         """
+        if table_fqn:
+            # --- Unity Catalog: write as managed table ---
+            try:
+                df.write.format("delta").mode("overwrite").option(
+                    "overwriteSchema", "true"
+                ).saveAsTable(table_fqn)
+
+                record_count = df.count()
+                print(f"  -> Written {record_count} records to {table_fqn}")
+
+                # Apply entity-level description as table comment
+                if entity_description:
+                    escaped_desc = entity_description.replace("'", "\\'").replace("\n", " ")
+                    self.spark.sql(f"COMMENT ON TABLE {table_fqn} IS '{escaped_desc}'")
+                    print(f"  -> Table comment: {entity_description[:80]}")
+
+                # Apply column-level descriptions from CDM .cdm.json
+                if column_descriptions:
+                    col_count = 0
+                    for col_name, description in column_descriptions.items():
+                        if col_name in df.columns and description:
+                            escaped = description.replace("'", "\\'").replace("\n", " ")
+                            self.spark.sql(
+                                f"ALTER TABLE {table_fqn} ALTER COLUMN `{col_name}` COMMENT '{escaped}'"
+                            )
+                            col_count += 1
+                    print(f"  -> Set {col_count} column descriptions from CDM")
+
+                return df
+            except Exception as e:
+                print(f"  ⚠ Unity Catalog write failed ({e}), falling back to path-based write")
+
+        # --- Fallback: path-based Delta write ---
         df.write.format("delta").mode("overwrite").option(
             "overwriteSchema", "true"
         ).save(silver_path)
 
         record_count = df.count()
         print(f"  -> Written {record_count} records to {silver_path}")
-
-        # --- Register in Unity Catalog with CDM descriptions ---
-        if catalog_name and schema_name and table_name:
-            fqn = f"`{catalog_name}`.`{schema_name}`.`{table_name}`"
-            try:
-                # Create schema if not exists
-                self.spark.sql(f"CREATE SCHEMA IF NOT EXISTS `{catalog_name}`.`{schema_name}`")
-
-                # Register as managed table from Delta path
-                self.spark.sql(f"""CREATE TABLE IF NOT EXISTS {fqn}
-                    USING DELTA LOCATION '{silver_path}'""")
-
-                # Apply entity-level description as table comment
-                if entity_description:
-                    escaped_desc = entity_description.replace("'", "\\'")
-                    self.spark.sql(f"COMMENT ON TABLE {fqn} IS '{escaped_desc}'")
-                    print(f"  -> Set table comment: {entity_description[:80]}...")
-
-                # Apply column-level descriptions from CDM .cdm.json
-                if column_descriptions:
-                    col_count = 0
-                    for col_name, description in column_descriptions.items():
-                        # Only set comment for columns that exist in the DataFrame
-                        if col_name in df.columns and description:
-                            escaped = description.replace("'", "\\'")
-                            self.spark.sql(
-                                f"ALTER TABLE {fqn} ALTER COLUMN `{col_name}` COMMENT '{escaped}'"
-                            )
-                            col_count += 1
-                    print(f"  -> Set {col_count} column descriptions in Unity Catalog")
-
-                print(f"  -> Registered as {fqn}")
-            except Exception as e:
-                print(f"  ⚠ Unity Catalog registration skipped: {e}")
-
         return df

@@ -67,7 +67,7 @@ print("Bronze Layer Summary")
 print("=" * 60)
 
 for entity in CDM_ENTITIES:
-    df = spark.read.format("delta").load(get_bronze_path(entity))
+    df = read_bronze(entity)
     count = df.count()
     cols = len(df.columns)
     tag = ""
@@ -104,8 +104,8 @@ print(f"  {'Entity':25s}  {'Bronze':>8s}  {'Silver':>8s}  {'Delta':>8s}  {'Note'
 print(f"  {'-'*25}  {'-'*8}  {'-'*8}  {'-'*8}  {'-'*20}")
 
 for entity in CDM_ENTITIES:
-    bronze_count = spark.read.format("delta").load(get_bronze_path(entity)).count()
-    silver_count = spark.read.format("delta").load(get_silver_path(entity)).count()
+    bronze_count = read_bronze(entity).count()
+    silver_count = read_silver(entity).count()
     delta = bronze_count - silver_count
     note = "deduplicated" if delta > 0 else "no duplicates" if delta == 0 else "expanded"
     print(f"  {CDM_ENTITIES[entity]:25s}  {bronze_count:8d}  {silver_count:8d}  {delta:+8d}  {note}")
@@ -123,7 +123,7 @@ print("=" * 60)
 
 for entity_name in CDM_ENTITIES:
     expected_schema = get_cdm_schema(entity_name)
-    silver_df = spark.read.format("delta").load(get_silver_path(entity_name))
+    silver_df = read_silver(entity_name)
     actual_schema = silver_df.schema
 
     expected_fields = {f.name for f in expected_schema.fields}
@@ -176,7 +176,7 @@ quality_engine = QualityEngine(QUALITY_RULES_PATH, spark)
 # Load all silver DataFrames for referential integrity checks
 silver_dfs = {}
 for entity_name in CDM_ENTITIES:
-    silver_dfs[entity_name] = spark.read.format("delta").load(get_silver_path(entity_name))
+    silver_dfs[entity_name] = read_silver(entity_name)
 
 # Run quality validation for all entities
 all_quality_results = {}
